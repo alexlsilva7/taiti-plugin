@@ -1,4 +1,8 @@
 .idea/
-.gradle/
+output/
+spg_repos/
 build/
-/libs
+error/
+gradle/
+.gradle/
+USEFUL_LINKS.md
