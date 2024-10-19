@@ -9,10 +9,14 @@ import br.edu.ufape.taiti.service.Task;
 import br.edu.ufape.taiti.settings.TaitiSettingsState;
 import br.ufpe.cin.tan.conflict.ConflictAnalyzer;
 import br.ufpe.cin.tan.conflict.PlannedTask;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowManager;
 import com.intellij.ui.JBColor;
+import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -32,7 +36,6 @@ import java.util.concurrent.TimeUnit;
 
 public class TaskBarGUI {
 
-
     private final DefaultTableModel modelo1;
     private final DefaultTableModel modelo2;
     private JPanel TaskBar;
@@ -46,30 +49,31 @@ public class TaskBarGUI {
     private JPanel tables;
     private JPanel content;
 
-    private final ArrayList<Task> storysList1;
-    private final ArrayList<Task> storysList2;
+    private final ArrayList<Task> myUnstartedStoriesList;
+
+    private final ArrayList<Task> otherPendingStoriesList; // Pending = started + unstarted
 
     private final Project project;
     static public ConflictAnalyzer conflictAnalyzer;
-    private LoadingScreen loading;
+    private final LoadingScreen loading;
 
     public TaskBarGUI(ToolWindow toolWindow, Project project) {
 
-        this.project=project;
+        this.project = project;
         conflictAnalyzer = new ConflictAnalyzer();
 
+        // Inicializa os componentes
         loading = new LoadingScreen();
         content = new JPanel();
         content.setLayout(new BorderLayout());
 
-        content.add(TaskBar,BorderLayout.CENTER);
-
+        content.add(loading, BorderLayout.CENTER);
 
         addPlaceHolderStyle(txtSearch);
-        storysList1 = new ArrayList<>();
-        storysList2 = new ArrayList<>();
+        myUnstartedStoriesList = new ArrayList<>();
+        otherPendingStoriesList = new ArrayList<>();
 
-        modelo1 = new DefaultTableModel(null,new String[]{"<html><b>My unstarted tasks</b></html>", "<html><b>Conflict Rate</b></html>"}){
+        modelo1 = new DefaultTableModel(null, new String[]{"<html><b>My unstarted tasks</b></html>", "<html><b>Conflict Rate</b></html>"}) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false; // Tornar todas as células não editáveis
@@ -86,7 +90,7 @@ public class TaskBarGUI {
         centerRenderer.setHorizontalAlignment(JLabel.CENTER);
         columns.getColumn(1).setCellRenderer(centerRenderer);
 
-        modelo2 = new DefaultTableModel(null,new String[]{"<html><b>Potential conflict-inducing tasks</b></html>"}){
+        modelo2 = new DefaultTableModel(null, new String[]{"<html><b>Potential conflict-inducing tasks</b></html>"}) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false; // Tornar todas as células não editáveis
@@ -94,13 +98,9 @@ public class TaskBarGUI {
         };
         startedTable.setModel(modelo2);
 
-
-        configTaskList();
-
         refreshButton.addActionListener(e -> {
             changeJpanel(loading);
             refresh();
-
         });
 
         txtSearch.addKeyListener(new KeyAdapter() {
@@ -114,7 +114,6 @@ public class TaskBarGUI {
                 TableRowSorter<DefaultTableModel> sorter2 = new TableRowSorter<>(modelo2);
                 startedTable.setRowSorter(sorter2);
                 sorter2.setRowFilter(RowFilter.regexFilter(txtSearch.getText()));
-
             }
         });
 
@@ -122,19 +121,17 @@ public class TaskBarGUI {
             @Override
             public void focusGained(FocusEvent e) {
                 super.focusGained(e);
-
                 txtSearch.setText(null);
                 txtSearch.requestFocus();
                 //remove placeholder style
                 removePlaceHolderStyle(txtSearch);
-
             }
         });
         txtSearch.addFocusListener(new FocusAdapter() {
             @Override
             public void focusLost(FocusEvent e) {
                 super.focusLost(e);
-                if(txtSearch.getText().length()==0){
+                if (txtSearch.getText().length() == 0) {
                     addPlaceHolderStyle(txtSearch);
                     txtSearch.setText("Search");
                 }
@@ -146,41 +143,19 @@ public class TaskBarGUI {
          * e cria um objeto TaitiDialog, responsável por mostrar a janela da aplicação.
          */
         addButton.addActionListener(e -> {
-
-
             TaitiDialog taitiDialog = new TaitiDialog(project, this);
             taitiDialog.show();
         });
-
-
-        /*
-         * Essa parte é responsável pelo Refresh de tempo em tempo
-         */
-
-        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
-
-// Crie uma instância de Runnable que representa a tarefa a ser executada periodicamente
-        Runnable refreshTask = new Runnable() {
-            @Override
-            public void run() {
-                // Chame a função refresh() dentro do método run()
-                changeJpanel(loading);
-                refresh();
-            }
-        };
-
-// Agende a tarefa para ser executada inicialmente após 0 segundos e repetidamente a cada 10 minutos
-        executor.scheduleAtFixedRate(refreshTask, 10, 15, TimeUnit.MINUTES);
-
+        //TODO: renomear tabelas
         unstartedTable.addMouseMotionListener(new MouseMotionAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
                 int row = unstartedTable.rowAtPoint(e.getPoint());
                 int column = unstartedTable.columnAtPoint(e.getPoint());
                 if (row > -1 && column > -1) {
-                    unstartedTable.setToolTipText("<html>" + storysList1.get(row).getStoryName() +
-                            "<br>TaskID: #" + storysList1.get(row).getId()+
-                            "<br>Owner: "+ storysList1.get(row).getPersonName() +"</html>");
+                    unstartedTable.setToolTipText("<html>" + myUnstartedStoriesList.get(row).getStoryName() +
+                            "<br>TaskID: #" + myUnstartedStoriesList.get(row).getId() +
+                            "<br>Owner: " + myUnstartedStoriesList.get(row).getPersonName() + "</html>");
                 } else {
                     unstartedTable.setToolTipText(null);
                 }
@@ -194,196 +169,191 @@ public class TaskBarGUI {
                 int row = startedTable.rowAtPoint(e.getPoint());
                 int column = startedTable.columnAtPoint(e.getPoint());
                 if (row > -1 && column > -1) {
-                    startedTable.setToolTipText("<html>" + storysList2.get(row).getStoryName() +
-                            "<br>TaskID: #" + storysList2.get(row).getId()+
-                            "<br>Owner: "+ storysList2.get(row).getPersonName() +"</html>");
+                    startedTable.setToolTipText("<html>" + otherPendingStoriesList.get(row).getStoryName() +
+                            "<br>TaskID: #" + otherPendingStoriesList.get(row).getId() +
+                            "<br>Owner: " + otherPendingStoriesList.get(row).getPersonName() + "</html>");
                 } else {
                     startedTable.setToolTipText(null);
                 }
-
             }
         });
+
         unstartedTable.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 super.mouseClicked(e);
                 if (e.getClickCount() == 2) { // Verifica se foi um clique duplo
                     int index = unstartedTable.getSelectedRow(); // Obtém o índice da linha selecionada
-                    Task task = storysList1.get(index);
+                    System.out.println(index);
+                    System.out.println(myUnstartedStoriesList.size());
+                    Task task = myUnstartedStoriesList.get(index);
 
-
-                    task.checkConflictRisk(storysList2);
-
+                    //task.checkConflictRisk(otherPendingStoriesList);
 
                     ToolWindowManager toolWindowManager = ToolWindowManager.getInstance(project);
                     ToolWindow myToolWindow = toolWindowManager.getToolWindow("Conflicts");
 
-
-                    String text = "Conflict table for task " + task.getName() + " which contains "
-                            + task.getConflictRate()  + " absolute conflicts.";
-
+                    String text = "Conflict table for task \"" + task.getName() + "\" which contains "
+                            + task.getConflictRate() + "% conflict rate.";
 
                     ConflictsGUI.setLabel(text);
-                    ConflictsGUI.fillTable(task, conflictAnalyzer,getStorysList2());
+                    ConflictsGUI.fillTable(task, conflictAnalyzer, getOtherPendingStoriesList());
 
                     if (myToolWindow != null) {
                         myToolWindow.show(null);
                     }
-
                 }
-
             }
         });
+
+        //configRefreshTask(); TODO: Desabilitado por questões de performance
+        // Iniciar o processamento inicial em segundo plano
+        configTaskList();
     }
 
+    private void configRefreshTask() {
+        /*
+         * Essa parte é responsável pelo Refresh de tempo em tempo
+         */
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+        // Crie uma instância de Runnable que representa a tarefa a ser executada periodicamente
+        Runnable refreshTask = () -> {
+            changeJpanel(loading);
+            refresh();
+        };
+        // Agende a tarefa para ser executada inicialmente após 15 minutos e repetidamente a cada 15 minutos
+        executor.scheduleAtFixedRate(refreshTask, 15, 15, TimeUnit.MINUTES);
+    }
 
-
-
-    private void addPlaceHolderStyle(JTextField textField){
+    private void addPlaceHolderStyle(JTextField textField) {
         Font font = textField.getFont();
         font = font.deriveFont(Font.ITALIC);
         textField.setFont(font);
         textField.setForeground(JBColor.GRAY); //PlaceHolder font color
     }
 
-    private void removePlaceHolderStyle(JTextField textField){
+    private void removePlaceHolderStyle(JTextField textField) {
         Font font = textField.getFont();
         font = font.deriveFont(Font.PLAIN);
         textField.setFont(font);
         textField.setForeground(JBColor.LIGHT_GRAY); //PlaceHolder font color
     }
 
-    private void configTaskList(){
+    private void configTaskList() {
         TaitiSettingsState settings = TaitiSettingsState.getInstance(project);
         settings.retrieveStoredCredentials(project);
         PivotalTracker pivotalTracker = new PivotalTracker(settings.getToken(), settings.getPivotalURL(), project);
 
-        if( pivotalTracker.checkStatus() == 200) {
-
+        if (pivotalTracker.checkStatus() == 200) {
             /**
              * Primeiramente esvazio o array que contem as tasks para preenche-lo novamente com as informações mais recentes
              */
-
             Stories plannedStories = new Stories(pivotalTracker, project, settings.getGithubURL());
             plannedStories.clearLists();
-            plannedStories.startList();
-            limparListas();
+            ProgressManager.getInstance().run(new com.intellij.openapi.progress.Task.Backgroundable(project, "Carregando Stories", true) {
+                @Override
+                public void run(@NotNull ProgressIndicator indicator) {
+                    plannedStories.startList(indicator);
+                }
 
+                @Override
+                public void onFinished() {
+                    limparListas();
+                    ArrayList<PlannedTask> othersPlannedTaskArrayList = new ArrayList<>();
+                    for (Task othersTask : plannedStories.getOtherPendingStories()) {
+                        othersPlannedTaskArrayList.add(othersTask.getiTesk());
+                    }
+                    for (Task myUnstartedTask : plannedStories.getMyUnstartedStories()) {
+                        double conflictRate = conflictAnalyzer.meanRelativeConflictRiskForTasks(myUnstartedTask.getiTesk(), othersPlannedTaskArrayList);
+                        double formattedConflictRate = Math.round(conflictRate * 100.0);
+                        myUnstartedTask.setConflictRate(formattedConflictRate);
+                    }
 
-            ArrayList<PlannedTask> plannedTaskArrayList = new ArrayList<>();
-            for(Task unstartedTask : plannedStories.getStartedStories()){
-                plannedTaskArrayList.add(unstartedTask.getiTesk());
-            }
-            for(Task startedTask : plannedStories.getUnstartedStories()){
-                double conflictRate = conflictAnalyzer.meanRelativeConflictRiskForTasks(startedTask.getiTesk(),plannedTaskArrayList);
-                double formattedConflictRate = Math.round(conflictRate * 100.0) / 100.0;
-                startedTask.setConflictRate(formattedConflictRate);
-            }
+                    // Add the unstarted stories to the main list first
+                    updateMyUnstartedStoriesList(plannedStories.getMyUnstartedStories(), myUnstartedStoriesList, modelo1);
+                    // Add the started stories to the main list
+                    updateOtherPendingStoriesList(plannedStories.getOtherPendingStories(), otherPendingStoriesList, modelo2);
 
-            // Add the unstarted stories to the main list first
-            atualizarListas(plannedStories.getUnstartedStories(), storysList1, modelo1);
+                    changeJpanel(TaskBar);
 
-            // Add the started stories to the main list
-            atualizarListas2(plannedStories.getStartedStories(), storysList2, modelo2);
+                    // Atualizar os modelos de tabela
+                    modelo1.fireTableDataChanged();
+                    modelo2.fireTableDataChanged();
+
+                    // Revalidar e repintar as tabelas
+                    unstartedTable.revalidate();
+                    unstartedTable.repaint();
+                    startedTable.revalidate();
+                    startedTable.repaint();
+                }
+
+                @Override
+                public void onCancel() {
+                    super.onCancel();
+                    limparListas();
+
+                    changeJpanel(TaskBar);
+                    ApplicationManager.getApplication().invokeLater(() -> {
+                        JOptionPane.showMessageDialog(content, "Processamento cancelado pelo usuario.");
+                    });
+                }
+            });
         }
     }
 
     private void limparListas() {
-
-        storysList1.clear();
-        storysList2.clear();
+        myUnstartedStoriesList.clear();
+        otherPendingStoriesList.clear();
 
         modelo1.setRowCount(0);
         modelo2.setRowCount(0);
-
     }
 
-    public   void changeJpanel(JPanel panel){
-        if (content.getComponent(0) != TaskBar) {
-            content.remove(panel);
-            content.add(TaskBar, BorderLayout.CENTER);
-        } else {
-            content.remove(TaskBar);
-            content.add(panel, BorderLayout.CENTER);
-        }
-
-        // Revalida e redesenha o conteúdo
-        content.revalidate();
-        content.repaint();
-    }
-    public void refresh(){
-
-        // Inicie a operação de atualização em uma SwingWorker
-        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
-            @Override
-            protected Void doInBackground() throws Exception {
-                // Executar a operação em segundo plano
-                configTaskList();
-                changeJpanel(loading);
-                return null;
-            }
-
-
-        };
-
-
-
-        // Iniciar o SwingWorker
-        worker.execute();
-
-    }
-
-    private void atualizarListas(List<Task> Stories, ArrayList<Task> storysList, DefaultTableModel model) {
-
-        for(Task Story : Stories){
-            storysList.add(Story);
-            String storyName = truncateStoryName(Story.getStoryName());
-
-//            ArrayList<LinkedHashMap<String, Serializable>> scenario = Story.getScenarios();
-//            int sum = 0;
-//
-//            for (LinkedHashMap<String, Serializable> lines : scenario) { // percorro scenario por scenario
-//
-//                ArrayList<Integer> number = (ArrayList<Integer>) lines.get("lines");
-//                sum += number.size();
-//            }
-
-
-            model.addRow(new Object[]{storyName,Story.getConflictRate()});
-
-
+    public void changeJpanel(JPanel panel) {
+        System.out.println("Change JPanel"+ panel.getName());
+        if (content.getComponent(0) != panel) { // Verifica se o painel atual é diferente do painel a ser adicionado
+            content.removeAll(); // Remove todos os componentes
+            content.add(panel, BorderLayout.CENTER); // Adiciona o novo painel
+            // Revalida e redesenha o conteúdo
+            content.revalidate();
+            content.repaint();
         }
     }
-    private void atualizarListas2(List<Task> Stories, ArrayList<Task> storysList, DefaultTableModel model) {
 
-        for(Task Story : Stories){
-            storysList.add(Story);
-            String storyName = truncateStoryName(Story.getStoryName());
+    public void refresh() {
+        configTaskList();
+    }
 
+    private void updateMyUnstartedStoriesList(List<Task> stories, ArrayList<Task> storiesList, DefaultTableModel model) {
+        for (Task story : stories) {
+            storiesList.add(story);
+            String storyName = truncateStoryName(story.getStoryName());
+            model.addRow(new Object[]{storyName, story.getConflictRate() + "%"});
+        }
+    }
 
+    private void updateOtherPendingStoriesList(List<Task> stories, ArrayList<Task> storiesList, DefaultTableModel model) {
+        for (Task story : stories) {
+            storiesList.add(story);
+            String storyName = truncateStoryName(story.getStoryName());
             model.addRow(new Object[]{storyName});
-
-
         }
     }
-
 
     // Função para limitar o texto das tasks na TaskList
-    private String truncateStoryName(String storyName){
+    private String truncateStoryName(String storyName) {
         if (storyName.length() > 50) {
             storyName = String.format("%s...", storyName.substring(0, 50));
         }
         return storyName;
     }
 
-
-
-    public ArrayList<Task> getStorysList1() {
-        return storysList1;
+    public ArrayList<Task> getmyUnstartedStoriesList() {
+        return myUnstartedStoriesList;
     }
 
-    public ArrayList<Task> getStorysList2() {
-        return storysList2;
+    public ArrayList<Task> getOtherPendingStoriesList() {
+        return otherPendingStoriesList;
     }
 
     public JPanel getContent() {

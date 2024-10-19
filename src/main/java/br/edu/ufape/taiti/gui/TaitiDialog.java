@@ -102,8 +102,8 @@ public class TaitiDialog extends DialogWrapper {
         if (!executed) {
             String storyID = textTaskID.getText().replace("#", ""); //pego a id que escrevi na tela add
             List<Task> allTasks = new ArrayList<>();
-            allTasks.addAll(taskBarGUI.getStorysList1()); //crio uma lista para todas as tasks com scenarios existentes
-            allTasks.addAll(taskBarGUI.getStorysList2());
+            allTasks.addAll(taskBarGUI.getmyUnstartedStoriesList()); //crio uma lista para todas as tasks com scenarios existentes
+            allTasks.addAll(taskBarGUI.getOtherPendingStoriesList());
 
             for (Task task : allTasks) { // percorro todas as tasks
                 if (String.valueOf(task.getId()).equals(storyID)) { //verifico se a task que estou adicionando ja tem scenarios
@@ -119,22 +119,15 @@ public class TaitiDialog extends DialogWrapper {
                     break; // interrompe o loop externo
                 }
             }
-
             executed = true;
         }
-
-
         return null;
-
     }
-
-
 
     @Override
     protected Action @NotNull [] createActions() {
         return new Action[]{getOKAction(), getCancelAction()};
     }
-
 
     @Override
     protected void doOKAction() {
@@ -157,10 +150,5 @@ public class TaitiDialog extends DialogWrapper {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-
     }
-
-
-
-
 }

@@ -50,7 +50,10 @@ public class TaitiTool {
                 itest = task.computeTestBasedInterface();
 
                 /* Exibindo o conjunto de arquivos no console */
-                Set<String> files = itest.findAllFiles();
+                Set<String> files = itest.getFiles();
+                Set<String> files2 = itest.getAllProdFiles();
+                Set<String> files3 = itest.findFilteredFiles();
+
                 System.out.printf("TestI(%d): %d%n", taskID, files.size());
                 for (String file : files) {
                     System.out.println(file);
