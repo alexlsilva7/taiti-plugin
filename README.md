@@ -21,7 +21,7 @@ Para o funcionamento do plugin TAITIr, são necessárias as seguintes ferramenta
 
 * Instalar o [RubyMine](https://www.jetbrains.com/pt-br/ruby/download/other.html) ou o [IntelliJ](https://www.jetbrains.com/idea/download/other.html);
     - Ultima versão suportada pelo plugin é a 2023.1.7;
-* Baixar o arquivo <em>.zip</em> do plugin disponível nas [releases do GitHub](https://github.com/vngabriel/taiti-plugin/releases/download/v0.1/taiti-plugin-0.1.zip);
+* Baixar o arquivo <em>.zip</em> do plugin disponível nas [releases do GitHub](https://github.com/alexlsilva7/taiti-plugin/releases/download/1.0/taiti-plugin-1.0-SNAPSHOT.zip);
 * Abrir a IDE e, conforme ilustrado pela Figura 1, ir em File > Settings/Preferences > Plugins, clicar na engrenagem superior ao lado da aba <em>Installed</em>, selecionar a opção <em>Install Plugin from Disk</em>, selecionar o arquivo <em>.zip</em> do plugin e clicar em OK.
 
 <figure>
