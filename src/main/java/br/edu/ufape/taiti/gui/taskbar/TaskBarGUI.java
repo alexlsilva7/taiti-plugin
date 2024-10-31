@@ -311,8 +311,12 @@ public class TaskBarGUI {
 
     public void changeJpanel(JPanel panel) {
         System.out.println("Change JPanel"+ panel.getName());
-        if (content.getComponent(0) != panel) { // Verifica se o painel atual é diferente do painel a ser adicionado
-            content.removeAll(); // Remove todos os componentes
+        if (content.getComponent(0) != panel && content != null) {
+            for(Component c : content.getComponents()){
+                if(c != null){
+                    content.remove(c);
+                }
+            }
             content.add(panel, BorderLayout.CENTER); // Adiciona o novo painel
             // Revalida e redesenha o conteúdo
             content.revalidate();
