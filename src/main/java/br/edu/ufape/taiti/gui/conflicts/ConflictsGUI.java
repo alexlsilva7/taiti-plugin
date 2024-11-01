@@ -141,17 +141,13 @@ public class ConflictsGUI {
                 Collection<String> paths = conflictAnalyzer.getConflictResult().getConflictingFiles();
                 Collection<String> conflictsPath = new ArrayList<>();
 
-                //remoção da pasta raiz nos nomes dos arquivos
-                String palavraRemoverLinux = project.getName() + "_" + project.getName() + "/";
-                String palavraRemoverWindows = project.getName() + "_" + project.getName() + "\\";
-
                 for (String str : paths) {
-                    str = str.replace(palavraRemoverLinux, "");
-                    str = str.replace(palavraRemoverWindows, "");
-                    conflictsPath.add(str);
+                    //remover o caminho do projeto
+                    String modifiedStr = str.replaceFirst(".*"+project.getName() + "_" + project.getName()+"[\\\\/]", "");
+                    conflictsPath.add(modifiedStr);
                 }
 
-                String stringConflicts = String.join("\n", conflictsPath);
+                String stringConflicts = String.join(" \n", conflictsPath);
 
                 int taskId = currentTask.getId();
                 String taskDescription = currentTask.getName();
@@ -188,9 +184,11 @@ public class ConflictsGUI {
     }
 
     public static void setLabel(String texto){
-        labelPanel.removeAll();
-        labelPanel.validate();
-        labelPanel.add(new JLabel(texto));
+        if(labelPanel != null){
+            labelPanel.removeAll();
+            labelPanel.validate();
+            labelPanel.add(new JLabel(texto));
+        }
     }
 
     public JPanel getContent() {
