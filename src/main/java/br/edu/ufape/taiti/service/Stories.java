@@ -18,6 +18,8 @@ import java.util.List;
 public class Stories {
     private final List<Task> myUnstartedStories;
     private final List<Task> otherPendingStories; // Pending = started + unstarted
+
+    private final List<Task> noScenarioTasks;
     private final PivotalTracker pivotalTracker;
     private final int ownerID;
     private Project project;
@@ -29,6 +31,7 @@ public class Stories {
         this.pivotalTracker = pivotalTracker;
         myUnstartedStories = new ArrayList<>();
         otherPendingStories = new ArrayList<>();
+        noScenarioTasks = new ArrayList<>();
         try {
             ownerID = pivotalTracker.getPersonId();
         } catch (IOException | InterruptedException e) {
@@ -39,55 +42,75 @@ public class Stories {
     public void clearLists() {
         myUnstartedStories.clear();
         otherPendingStories.clear();
+        noScenarioTasks.clear();
     }
 
     public void startList(ProgressIndicator indicator) {
         clearLists();
 
         try {
-            JSONArray plannedStories = pivotalTracker.getPlannedStories();
-            for (int i = 0; i < plannedStories.length(); i++) {
+            JSONArray plannedStoriesArray = pivotalTracker.getPlannedStories();
+            for (int i = 0; i < plannedStoriesArray.length(); i++) {
                 if (indicator.isCanceled()) {
                     break;
                 }
-                indicator.setFraction((double) i / plannedStories.length());
-                indicator.setText("Processando story " + (i + 1) + " de " + plannedStories.length());
+                indicator.setFraction((double) i / plannedStoriesArray.length());
+                indicator.setText("Processando story " + (i + 1) + " de " + plannedStoriesArray.length());
+                indicator.setText2("Nome da story: " + plannedStoriesArray.getJSONObject(i).getString("name"));
 
-                JSONObject obj = plannedStories.getJSONObject(i);
+                JSONObject obj = plannedStoriesArray.getJSONObject(i);
                 int taskId = obj.getInt("id");
 
-                JSONObject taitiComment = pivotalTracker.getTaitiComment(pivotalTracker.getComments(String.valueOf(taskId)));
-                //Seleciono apenas as tasks que contem o arquivo [TAITI] Scenarios, ou seja, que já foram adicionados
-                if (taitiComment != null && taitiComment.getString("text").equals("[TAITI] Scenarios")) {
-                    Task plannedStory = new Task(obj, pivotalTracker, project);
-                    ArrayList<LinkedHashMap<String, Serializable>> tests = plannedStory.getScenarios();
-                    int idTeste = plannedStory.getId();
+                Task plannedStory = new Task(obj, pivotalTracker, project);
 
-                    // Aqui está o processamento pesado
-                    TodoTask todoTask = new TodoTask(githubURL, idTeste, tests);
-                    PlannedTask plannedTask = todoTask.generateTaskForConflictAnalysis();
-                    plannedStory.setiTesk(plannedTask);
+                String state = plannedStory.getState();
+                int plannedStoryOwnerID = plannedStory.getOwnerID();
 
-                    String state = plannedStory.getState();
-                    int plannedStoryOwnerID = plannedStory.getOwnerID();
+                boolean isUnstarted = "unstarted".equals(state);
+                boolean isStarted = "started".equals(state);
 
-                    // Adiciona às listas de forma thread-safe
-                    if (state.equals("unstarted") && plannedStoryOwnerID == ownerID) {
-                        //Adiciono a uma lista as MINHAS tasks que ainda não começaram
+                // Se a tarefa é do usuário e está "unstarted"
+                if (isUnstarted && plannedStoryOwnerID == ownerID) {
+                    // Tarefas do usuário não iniciadas
+                    if (plannedStory.hasScenarios()) {
+                        processPlannedStory(plannedStory);
                         synchronized (myUnstartedStories) {
                             myUnstartedStories.add(plannedStory);
                         }
-                    } else if ((state.equals("started") || state.equals("unstarted"))
-                            && plannedStoryOwnerID != ownerID) {
-                        //Adiciono a uma lista as tasks que já começaram de OUTROS membros
+                    } else {
+                        // Sem cenários
+                        synchronized (noScenarioTasks) {
+                            noScenarioTasks.add(plannedStory);
+                        }
+                    }
+                } else if ((isStarted || isUnstarted) && plannedStoryOwnerID != ownerID) {
+                    // Tarefas de outros desenvolvedores (iniciadas ou não)
+                    if (plannedStory.hasScenarios()) {
+                        processPlannedStory(plannedStory);
                         synchronized (otherPendingStories) {
                             otherPendingStories.add(plannedStory);
+                        }
+                    } else {
+                        // Sem cenários
+                        synchronized (noScenarioTasks) {
+                            noScenarioTasks.add(plannedStory);
                         }
                     }
                 }
             }
-        } catch (HttpException | InterruptedException | IOException  | CloningRepositoryException e) {
+        } catch (HttpException | InterruptedException | IOException | CloningRepositoryException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private void processPlannedStory(Task plannedStory) throws CloningRepositoryException {
+        if (plannedStory.hasScenarios()) {
+            ArrayList<LinkedHashMap<String, Serializable>> tests = plannedStory.getScenarios();
+            int idTeste = plannedStory.getId();
+
+            TodoTask todoTask = new TodoTask(githubURL, idTeste, tests);
+            PlannedTask plannedTask = todoTask.generateTaskForConflictAnalysis();
+            plannedStory.setiTesk(plannedTask);
         }
     }
 
@@ -97,6 +120,10 @@ public class Stories {
 
     public List<Task> getOtherPendingStories() {
         return otherPendingStories;
+    }
+
+    public List<Task> getNoScenarioTasks() {
+        return noScenarioTasks;
     }
 
 

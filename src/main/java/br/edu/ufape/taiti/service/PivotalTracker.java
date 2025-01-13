@@ -64,6 +64,14 @@ public class PivotalTracker {
         postCommentWithFile(scenarios, taskID);
 
     }
+
+    public void deleteScenarios(String taskID) throws HttpException, IOException, InterruptedException {
+        JSONArray comments = getComments(taskID);
+        JSONObject taitiComment = getTaitiComment(comments);
+        if (taitiComment != null) {
+            deleteComment(getID(taitiComment), taskID);
+        }
+    }
     public int checkStatus()  {
         if(projectID.isBlank()){
             return 400;

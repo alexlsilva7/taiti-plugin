@@ -22,6 +22,14 @@ public class FeatureFileViewModel extends AbstractTableModel {
         this.scenarios = scenarios;
         this.tableModel = tableModel;
         columns = new String[]{"", this.file.getName()};
+
+        for (FileLine fl : rows) {
+            int ln = fl.getLineNumber();
+            // Se scenarios já contém (file, ln), marca
+            if (scenarios.contains(new ScenarioTestInformation(this.file.getPath(), ln))) {
+                fl.setCheckbox(true);
+            }
+        }
     }
 
     @Override
@@ -83,6 +91,9 @@ public class FeatureFileViewModel extends AbstractTableModel {
         }
 
         fireTableCellUpdated(rowIndex, columnIndex);
+    }
+    public FileLine getFileLineAt(int rowIndex) {
+        return rows.get(rowIndex);
     }
 
     @Override

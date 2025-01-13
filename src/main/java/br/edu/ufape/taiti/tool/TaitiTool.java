@@ -209,8 +209,12 @@ public class TaitiTool {
         if (projectDir != null) {
             projectName = projectDir.getName();
         }
-
-        return absolutePath.substring(absolutePath.indexOf(projectName)).replace(projectName + File.separator, "");
+        if(absolutePath.contains(projectName)){
+            return absolutePath.substring(absolutePath.indexOf(projectName)).replace(projectName + File.separator, "");
+        }else if(absolutePath.contains("bin")){
+            return absolutePath.substring(absolutePath.indexOf("bin") + 4);
+        }
+        return absolutePath;
     }
 
     private String getProjectPath() {

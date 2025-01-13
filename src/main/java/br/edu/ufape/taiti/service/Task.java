@@ -2,6 +2,7 @@ package br.edu.ufape.taiti.service;
 
 
 import br.edu.ufape.taiti.exceptions.HttpException;
+import br.edu.ufape.taiti.tool.ScenarioTestInformation;
 import br.edu.ufape.taiti.tool.TaitiTool;
 import br.ufpe.cin.tan.conflict.PlannedTask;
 import com.intellij.openapi.project.Project;
@@ -36,7 +37,7 @@ public class Task {
     private ArrayList<LinkedHashMap<String, Serializable>> conflictScenarios = new ArrayList<>();
     private double conflictRate;
 
-
+    private boolean hasScenarios;
 
     // curl -X GET -H "X-TrackerToken: ce2a6540e0be3574c871f403fb12ef0f" "https://www.pivotaltracker.com/services/v5/projects/2590203/memberships"
 
@@ -60,35 +61,59 @@ public class Task {
         setScenarios(pivotalTracker, project);
     }
 
+    //toScenarioTestInformationList
+
+    public List<ScenarioTestInformation> toScenarioTestInformationList() {
+        List<ScenarioTestInformation> scenarioInfoList = new ArrayList<>();
+        for (LinkedHashMap<String, Serializable> scenario : getScenarios()) {
+            // Assumindo que o mapa "scenario" contenha as chaves "file_path" e "line_number"
+            String filePath = (String) scenario.get("path");
+            List<Integer> lines = (List<Integer>) scenario.get("lines");
+
+            // Criar objetos ScenarioTestInformation para cada linha do cenário
+            for (int line : lines) {
+                scenarioInfoList.add(new ScenarioTestInformation(filePath, line));
+            }
+        }
+        return scenarioInfoList;
+    }
+
     public void setScenarios(PivotalTracker pivotalTracker, Project project) throws IOException, InterruptedException {
         try {
-            File files = pivotalTracker.downloadFiles(String.valueOf(id));
-            if (files != null) {
-                TaitiTool taiti = new TaitiTool(project);
-                List<String[]> arquivo = taiti.readTaitiFile(files);
-                for (String[] linha : arquivo) {
-                    String absolutePath =  linha[0];
-                    String[] numbersString = linha[1].replaceAll("[\\[\\]]", "").split(", ");
+            // Verifica se há cenários associados através do comentário [TAITI] Scenarios
+            JSONObject taitiComment = pivotalTracker.getTaitiComment(pivotalTracker.getComments(String.valueOf(id)));
+            if (taitiComment != null && "[TAITI] Scenarios".equals(taitiComment.getString("text"))) {
+                hasScenarios = true;
+                File files = pivotalTracker.downloadFiles(String.valueOf(id));
+                if (files != null) {
+                    TaitiTool taiti = new TaitiTool(project);
+                    List<String[]> arquivo = taiti.readTaitiFile(files);
+                    for (String[] linha : arquivo) {
+                        String absolutePath = linha[0];
+                        String[] numbersString = linha[1].replaceAll("[\\[\\]]", "").split(", ");
 
-                    ArrayList<Integer> numbersInt = new ArrayList<>();
-                    for (String s : numbersString) {
-                        numbersInt.add(Integer.parseInt(s));
+                        ArrayList<Integer> numbersInt = new ArrayList<>();
+                        for (String s : numbersString) {
+                            numbersInt.add(Integer.parseInt(s.trim()));
+                        }
+                        LinkedHashMap<String, Serializable> map = new LinkedHashMap<>(2);
+                        map.put("path", absolutePath);
+                        map.put("lines", numbersInt);
+                        scenarios.add(map);
                     }
-                    LinkedHashMap<String, Serializable> map = new LinkedHashMap<String, Serializable>(2);
-
-                    map.put("path", absolutePath);
-                    map.put("lines", numbersInt);
-                    scenarios.add(map);
-
+                    files.delete();
                 }
-                files.delete();
-
-
+            } else {
+                hasScenarios = false;
             }
 
         } catch (HttpException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public boolean hasScenarios() {
+        return hasScenarios;
     }
 
     public void checkConflictRisk(List<Task> listTask) {

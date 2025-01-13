@@ -22,8 +22,9 @@ import java.awt.event.*;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
-import java.util.ArrayList;
-import java.util.Scanner;
+import java.io.IOException;
+import java.util.*;
+import java.util.List;
 
 public class MainPanel {
     private JPanel rootPanel;
@@ -31,15 +32,11 @@ public class MainPanel {
     private JPanel northPanel;
     private JPanel southPanel;
     private JPanel treePanel;
-    private JPanel inputPanel;
 
     private JSplitPane mainSplit;
     private JSplitPane leftSplit;
 
     private TaitiTree tree;
-
-    private JLabel labelTaskID;
-    private JTextField textTaskID;
 
     private JBTable table;
     private TestsTableModel tableModel;
@@ -60,13 +57,6 @@ public class MainPanel {
         configureTree();
         initTable();
         initCenterPanel();
-        textTaskID.addFocusListener(new FocusAdapter() {
-            @Override
-            public void focusLost(FocusEvent e) {
-                super.focusLost(e);
-
-            }
-        });
     }
 
     public JPanel getRootPanel() {
@@ -77,12 +67,70 @@ public class MainPanel {
         return scenarios;
     }
 
-    public JTextField getTextTaskID() {
-        return textTaskID;
-    }
-
     public JBTable getTable() {
         return table;
+    }
+
+    private File findFeatureFile(Project project, String relativePath) {
+        String projectPath = ProjectUtil.guessProjectDir(project).getPath();
+        File file = new File(projectPath, relativePath);
+
+        if (!file.exists()) {
+            System.out.println("Arquivo não encontrado: " + file.getAbsolutePath());
+            return null;
+        }
+        return file;
+    }
+
+    private String getScenarioName(File file, int lineNumber) {
+        try (Scanner scanner = new Scanner(new FileReader(file))) {
+            int currentLine = 1;
+            while (scanner.hasNextLine()) {
+                String line = scanner.nextLine();
+
+                if (currentLine == lineNumber) {
+                    if (line.trim().toLowerCase().startsWith("scenario")) {
+                        return line.trim();
+                    } else {
+                        // se a linha 13 não for a linha do "Scenario", retorna a string bruta
+                        return line.trim();
+                    }
+                }
+                currentLine++;
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return "Scenario at line: " + lineNumber;
+    }
+
+
+    public void loadExistingScenarios(List<ScenarioTestInformation> existingScenarios) {
+        Map<File, List<Integer>> scenariosByFile = new HashMap<>();
+
+        for (ScenarioTestInformation scenario : existingScenarios) {
+            File absoluteFile = findFeatureFile(this.project, scenario.getFilePath());
+            int lineNumber = scenario.getLineNumber();
+            if (absoluteFile != null) {
+                scenariosByFile
+                        .computeIfAbsent(absoluteFile, k -> new ArrayList<>())
+                        .add(lineNumber);
+            }
+        }
+
+        // Adiciona cenários na tabela e na lista de cenários
+        for (Map.Entry<File, List<Integer>> entry : scenariosByFile.entrySet()) {
+            File file = entry.getKey();
+            List<Integer> lines = entry.getValue();
+
+            for (int lineNumber : lines) {
+                scenarios.add(new ScenarioTestInformation(file.getAbsolutePath(), lineNumber));
+                String scenarioName = getScenarioName(file, lineNumber);
+                tableModel.addRow(new TestRow(file, false, scenarioName));
+            }
+
+            tableModel.fireTableDataChanged();
+        }
     }
 
     public void updateCenterPanel(File file) {
@@ -136,15 +184,6 @@ public class MainPanel {
         featureFileView.setRowSelectionAllowed(false);
 
         centerPanel.add(new JScrollPane(featureFileView), BorderLayout.CENTER);
-    }
-
-    public void addScenario(File file, int row){
-        updateCenterPanel(file);
-        if(repositoryOpenFeatureFile.exists(file)){
-
-            featureFileViewModel.setValueAt(true, row+1, 0);
-            featureFileViewModel.fireTableDataChanged();
-        }
     }
 
     private void initTable() {
@@ -273,12 +312,10 @@ public class MainPanel {
         leftSplit.setBorder(null);
         northPanel.setBorder(null);
         southPanel.setBorder(null);
-        inputPanel.setBorder(null);
         treePanel.setBorder(null);
 
         rootPanel.setBorder(BorderFactory.createLineBorder(JBColor.border()));
         centerPanel.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, JBColor.border()));
-        inputPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         southPanel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, JBColor.border()));
         leftSplit.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, JBColor.border()));
 

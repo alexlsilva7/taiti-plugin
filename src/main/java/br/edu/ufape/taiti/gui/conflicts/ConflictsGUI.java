@@ -33,7 +33,7 @@ public class ConflictsGUI {
 
     private static Project project;
 
-    public ConflictsGUI(ToolWindow toolWindow, Project project){
+    public ConflictsGUI(ToolWindow toolWindow, Project project) {
         this.project = project;
         content = new JPanel();
         ConflictsPanel = new JPanel();
@@ -110,54 +110,68 @@ public class ConflictsGUI {
         }
         content.setLayout(new BorderLayout());
 
-        content.add(ConflictsPanel,BorderLayout.CENTER);
+        content.add(ConflictsPanel, BorderLayout.CENTER);
     }
 
-    static public void fillTable(Task task, ConflictAnalyzer conflictAnalyzer, ArrayList<Task> storysList){
+    static public void fillTable(Task task, ConflictAnalyzer conflictAnalyzer, ArrayList<Task> storysList) {
         modeloTabela.setRowCount(0);
-        if(!storysList.isEmpty()){
-            LoadingScreen loadingScreen = new LoadingScreen();
-            changePanel(loadingScreen);
-
-            // Calcular as taxas de conflito para cada tarefa
-            for (Task currentTask : storysList) {
-                conflictAnalyzer.computeConflictRiskForPair(task.getiTesk(), currentTask.getiTesk());
-
-                double conflictRate = conflictAnalyzer.getConflictResult().getRelativeConflictRate();
-                double formattedConflictRate = Math.round(conflictRate * 100.0);
-                currentTask.setConflictRate(formattedConflictRate);
-            }
-
-            // Ordena a lista com base na taxa de conflito (decrescente)
-            storysList.sort((t1, t2) -> Double.compare(t2.getConflictRate(), t1.getConflictRate()));
-
-            // Preenche a tabela com a lista ordenada
-            for (Task currentTask : storysList) {
-                if (currentTask.getConflictRate() == 0.0) {
-                    continue; // Ignora tarefas com taxa de conflito zero
-                }
-                conflictAnalyzer.computeConflictRiskForPair(task.getiTesk(), currentTask.getiTesk());
-
-                Collection<String> paths = conflictAnalyzer.getConflictResult().getConflictingFiles();
-                Collection<String> conflictsPath = new ArrayList<>();
-
-                for (String str : paths) {
-                    //remover o caminho do projeto
-                    String modifiedStr = str.replaceFirst(".*"+project.getName() + "_" + project.getName()+"[\\\\/]", "");
-                    conflictsPath.add(modifiedStr);
-                }
-
-                String stringConflicts = String.join(" \n", conflictsPath);
-
-                int taskId = currentTask.getId();
-                String taskDescription = currentTask.getName();
-                String taskUrl = currentTask.getUrl();
-
-                modeloTabela.addRow(new Object[]{taskId, taskDescription, taskUrl, currentTask.getConflictRate() + "%", stringConflicts});
-            }
-            // Remove a tela de carregamento e exibe a tabela
-            changePanel(loadingScreen);
+        if (storysList.isEmpty()) {
+            return;
         }
+
+        LoadingScreen loadingScreen = new LoadingScreen();
+        changePanel(loadingScreen);
+
+        ArrayList<Task> tasksWithItesk = new ArrayList<>();
+        for (Task currentTask : storysList) {
+            if (task.getiTesk() != null && currentTask.getiTesk() != null) {
+                tasksWithItesk.add(currentTask);
+            }
+        }
+
+        if (tasksWithItesk.isEmpty()) {
+            changePanel(loadingScreen);
+            return;
+        }
+
+        // Calcular as taxas de conflito para cada tarefa
+        for (Task currentTask : tasksWithItesk) {
+            conflictAnalyzer.computeConflictRiskForPair(task.getiTesk(), currentTask.getiTesk());
+
+            double conflictRate = conflictAnalyzer.getConflictResult().getRelativeConflictRate();
+            double formattedConflictRate = Math.round(conflictRate * 100.0);
+            currentTask.setConflictRate(formattedConflictRate);
+        }
+
+        // Ordena a lista com base na taxa de conflito (decrescente)
+        tasksWithItesk.sort((t1, t2) -> Double.compare(t2.getConflictRate(), t1.getConflictRate()));
+
+        // Preenche a tabela com a lista ordenada
+        for (Task currentTask : tasksWithItesk) {
+            if (currentTask.getConflictRate() == 0.0) {
+                continue; // Ignora tarefas com taxa de conflito zero
+            }
+            conflictAnalyzer.computeConflictRiskForPair(task.getiTesk(), currentTask.getiTesk());
+
+            Collection<String> paths = conflictAnalyzer.getConflictResult().getConflictingFiles();
+            Collection<String> conflictsPath = new ArrayList<>();
+
+            for (String str : paths) {
+                //remover o caminho do projeto
+                String modifiedStr = str.replaceFirst(".*" + project.getName() + "_" + project.getName() + "[\\\\/]", "");
+                conflictsPath.add(modifiedStr);
+            }
+
+            String stringConflicts = String.join(" \n", conflictsPath);
+
+            int taskId = currentTask.getId();
+            String taskDescription = currentTask.getName();
+            String taskUrl = currentTask.getUrl();
+
+            modeloTabela.addRow(new Object[]{taskId, taskDescription, taskUrl, currentTask.getConflictRate() + "%", stringConflicts});
+        }
+        // Remove a tela de carregamento e exibe a tabela
+        changePanel(loadingScreen);
     }
 
     private void showCellContentDialog(String content) {
@@ -169,7 +183,7 @@ public class ConflictsGUI {
         JOptionPane.showMessageDialog(null, scrollPane, "Conflict files paths", JOptionPane.PLAIN_MESSAGE);
     }
 
-    private static void changePanel(JPanel panel){
+    private static void changePanel(JPanel panel) {
         if (content.getComponent(0) != ConflictsPanel) {
             content.remove(panel);
             content.add(ConflictsPanel, BorderLayout.CENTER);
@@ -183,8 +197,8 @@ public class ConflictsGUI {
         content.repaint();
     }
 
-    public static void setLabel(String texto){
-        if(labelPanel != null){
+    public static void setLabel(String texto) {
+        if (labelPanel != null) {
             labelPanel.removeAll();
             labelPanel.validate();
             labelPanel.add(new JLabel(texto));
