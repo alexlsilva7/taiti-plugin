@@ -272,22 +272,29 @@
                             taitiDialog.getMainPanel().loadExistingScenarios(task.toScenarioTestInformationList());
                         });
                         popupMenu.add(editTestsItem);
-
+                        
                         JMenuItem removeTestsItem = new JMenuItem("Remove tests");
                         removeTestsItem.addActionListener(evt -> {
-                            TaitiSettingsState settings = TaitiSettingsState.getInstance(project);
-                            settings.retrieveStoredCredentials(project);
-                            PivotalTracker pivotalTracker = new PivotalTracker(settings.getToken(), settings.getPivotalURL(), project);
-                            try {
-                                pivotalTracker.deleteScenarios(String.valueOf(task.getId()));
-                                refresh();
-                            } catch (HttpException | InterruptedException | IOException e1) {
-                                e1.printStackTrace();
+                            int result = JOptionPane.showConfirmDialog(
+                                    TaskBar,
+                                    "Are you sure you want to remove tests for this task?",
+                                    "Confirm Remove Tests",
+                                    JOptionPane.YES_NO_OPTION);
+                            if (result == JOptionPane.YES_OPTION) {
+                                changeJpanel(loading);
+                                TaitiSettingsState settings = TaitiSettingsState.getInstance(project);
+                                settings.retrieveStoredCredentials(project);
+                                PivotalTracker pivotalTracker = new PivotalTracker(settings.getToken(), settings.getPivotalURL(), project);
+                                try {
+                                    pivotalTracker.deleteScenarios(String.valueOf(task.getId()));
+                                    refresh();
+                                } catch (HttpException | InterruptedException | IOException e1) {
+                                    e1.printStackTrace();
+                                }
                             }
                         });
 
                         popupMenu.add(removeTestsItem);
-
                         popupMenu.show(unstartedTable, e.getX(), e.getY());
                     }
                 }
