@@ -26,6 +26,10 @@ import java.io.IOException;
 import java.util.*;
 import java.util.List;
 
+import com.intellij.openapi.vfs.VirtualFile;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Paths;
+
 public class MainPanel {
     private JPanel rootPanel;
     private JPanel centerPanel;
@@ -72,14 +76,57 @@ public class MainPanel {
     }
 
     private File findFeatureFile(Project project, String relativePath) {
-        String projectPath = ProjectUtil.guessProjectDir(project).getPath();
-        File file = new File(projectPath, relativePath);
-
-        if (!file.exists()) {
-            System.out.println("Arquivo não encontrado: " + file.getAbsolutePath());
+        VirtualFile projectDir = ProjectUtil.guessProjectDir(project);
+        if (projectDir == null) {
+            System.out.println("Project directory not found");
             return null;
         }
-        return file;
+
+        try {
+            // Converter caminho relativo para o formato do sistema
+            String normalizedPath = Paths.get(relativePath).normalize().toString();
+
+            // Usar a API do IntelliJ para encontrar o arquivo
+            VirtualFile virtualFile = projectDir.findFileByRelativePath(normalizedPath);
+
+            if (virtualFile == null || !virtualFile.exists()) {
+                // Tentar encontrar com match case insensitivo
+                virtualFile = findFileCaseInsensitive(projectDir, normalizedPath);
+            }
+
+            if (virtualFile != null && virtualFile.exists()) {
+                return new File(virtualFile.getPath());
+            }
+
+            System.out.println("File not found: " + normalizedPath);
+            return null;
+
+        } catch (InvalidPathException e) {
+            System.out.println("Invalid path format: " + relativePath);
+            return null;
+        }
+    }
+
+    private VirtualFile findFileCaseInsensitive(VirtualFile baseDir, String relativePath) {
+        String[] parts = relativePath.split("[\\\\/]");
+        VirtualFile current = baseDir;
+
+        for (String part : parts) {
+            if (current == null) break;
+
+            VirtualFile child = current.findChild(part); // Tenta match exato primeiro
+            if (child == null) {
+                // Busca case insensitive
+                for (VirtualFile f : current.getChildren()) {
+                    if (f.getName().equalsIgnoreCase(part)) {
+                        child = f;
+                        break;
+                    }
+                }
+            }
+            current = child;
+        }
+        return current;
     }
 
     private String getScenarioName(File file, int lineNumber) {
@@ -126,7 +173,7 @@ public class MainPanel {
             for (int lineNumber : lines) {
                 scenarios.add(new ScenarioTestInformation(file.getAbsolutePath(), lineNumber));
                 String scenarioName = getScenarioName(file, lineNumber);
-                tableModel.addRow(new TestRow(file, false, scenarioName));
+                tableModel.addRow(new TestRow(file, false, scenarioName, lineNumber));
             }
 
             tableModel.fireTableDataChanged();
@@ -231,8 +278,8 @@ public class MainPanel {
         tableModel = new TestsTableModel();
         table.setModel(tableModel);
 
-        tableModel.addRow(new TestRow(null, false, "Tests"));
-        table.setRowHeight(0, 30);
+        tableModel.addRow(new TestRow(null, false, "Tests", 0));
+        table.setRowHeight(40);
         table.getColumnModel().getColumn(0).setPreferredWidth(30);
         table.getColumnModel().getColumn(1).setPreferredWidth(270);
         table.getColumnModel().getColumn(0).setCellRenderer(new TestsTableRenderer());

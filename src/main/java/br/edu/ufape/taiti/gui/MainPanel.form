@@ -74,7 +74,7 @@
                   <splitpane position="right"/>
                 </constraints>
                 <properties>
-                  <minimumSize width="150" height="150"/>
+                  <minimumSize width="250" height="150"/>
                 </properties>
                 <border type="none"/>
                 <children/>
@@ -88,7 +88,7 @@
             </constraints>
             <properties>
               <inheritsPopupMenu value="false"/>
-              <minimumSize width="550" height="720"/>
+              <minimumSize width="450" height="720"/>
               <preferredSize width="550" height="720"/>
             </properties>
             <border type="none"/>
