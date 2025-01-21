@@ -342,7 +342,7 @@ public class MainPanel {
             }
 
             // populating the tree with the files into feature directory
-            tree.addNodesToTree(featureDirectory.getAbsolutePath(), featureNode);
+            tree.addNodesToTree(featureDirectory, featureNode);
             treePanel.add(new JScrollPane(tree), BorderLayout.CENTER);
         } else {
             JLabel label = new JLabel("Could not find feature directory");
