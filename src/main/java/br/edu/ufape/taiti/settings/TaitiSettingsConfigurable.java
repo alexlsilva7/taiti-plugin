@@ -55,6 +55,8 @@ public class TaitiSettingsConfigurable implements Configurable {
         modified |= !component.getScenariosFolder().equals(settings.scenariosFolder);
         modified |= !component.getUnityTestFolder().equals(settings.unityTestFolder);
         modified |= !component.getStepDefinitionsFolder().equals(settings.stepDefinitionsFolder);
+        modified |= component.isStructuralDependenciesEnabled() != settings.isStructuralDependenciesEnabled();
+        modified |= component.isLogicalDependenciesEnabled() != settings.isLogicalDependenciesEnabled();
         return modified;
     }
 
@@ -68,6 +70,8 @@ public class TaitiSettingsConfigurable implements Configurable {
         settings.scenariosFolder = component.getScenariosFolder();
         settings.unityTestFolder = component.getUnityTestFolder();
         settings.stepDefinitionsFolder = component.getStepDefinitionsFolder();
+        settings.setStructuralDependenciesEnabled(component.isStructuralDependenciesEnabled());
+        settings.setLogicalDependenciesEnabled(component.isLogicalDependenciesEnabled());
         settings.storeCredentials(project);
     }
 
@@ -81,6 +85,8 @@ public class TaitiSettingsConfigurable implements Configurable {
         component.setStepDefinitionsFolder(settings.stepDefinitionsFolder);
         component.setUnityTestFolder(settings.unityTestFolder);
         component.setScenariosFolder(settings.scenariosFolder);
+        component.setStructuralDependenciesEnabled(settings.isStructuralDependenciesEnabled());
+        component.setLogicalDependenciesEnabled(settings.isLogicalDependenciesEnabled());
     }
 
     @Override

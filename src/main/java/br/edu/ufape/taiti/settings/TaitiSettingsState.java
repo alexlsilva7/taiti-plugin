@@ -18,6 +18,24 @@ public class TaitiSettingsState {
     protected String scenariosFolder = "features";
     protected String stepDefinitionsFolder = "features/step_definitions";
     protected String unityTestFolder = "spec";
+    private boolean structuralDependenciesEnabled = false;
+    private boolean logicalDependenciesEnabled = false;
+
+    public boolean isStructuralDependenciesEnabled() {
+        return structuralDependenciesEnabled;
+    }
+
+    public void setStructuralDependenciesEnabled(boolean structuralDependenciesEnabled) {
+        this.structuralDependenciesEnabled = structuralDependenciesEnabled;
+    }
+
+    public boolean isLogicalDependenciesEnabled() {
+        return logicalDependenciesEnabled;
+    }
+
+    public void setLogicalDependenciesEnabled(boolean logicalDependenciesEnabled) {
+        this.logicalDependenciesEnabled = logicalDependenciesEnabled;
+    }
 
     public String getScenariosFolder() {
         return scenariosFolder;
@@ -55,6 +73,8 @@ public class TaitiSettingsState {
         String keyScenariosFolder = "scenariosFolder" + getProjectName(project);
         String keyStepDefinitionsFolder = "stepDefinitionsFolder" + getProjectName(project);
         String keyUnityTestFolder = "unityTestFolder" + getProjectName(project);
+        String keyStructuralDependencies = "structuralDependencies" + getProjectName(project);
+        String keyLogicalDependencies = "logicalDependencies" + getProjectName(project);
 
         CredentialAttributes credentialAttributes = createCredentialAttributes(keyPivotalURL);
         Credentials credentials = PasswordSafe.getInstance().get(credentialAttributes);
@@ -91,6 +111,18 @@ public class TaitiSettingsState {
         if (credentials != null) {
             this.scenariosFolder = credentials.getPasswordAsString();
         }
+
+        credentialAttributes = createCredentialAttributes(keyStructuralDependencies);
+        credentials = PasswordSafe.getInstance().get(credentialAttributes);
+        if (credentials != null) {
+            this.structuralDependenciesEnabled = Boolean.parseBoolean(credentials.getPasswordAsString());
+        }
+
+        credentialAttributes = createCredentialAttributes(keyLogicalDependencies);
+        credentials = PasswordSafe.getInstance().get(credentialAttributes);
+        if (credentials != null) {
+            this.logicalDependenciesEnabled = Boolean.parseBoolean(credentials.getPasswordAsString());
+        }
     }
 
     public void storeCredentials(Project project) {
@@ -101,6 +133,8 @@ public class TaitiSettingsState {
         String keyScenariosFolder = "scenariosFolder" + getProjectName(project);
         String keyStepDefinitionsFolder = "stepDefinitionsFolder" + getProjectName(project);
         String keyUnityTestFolder = "unityTestFolder" + getProjectName(project);
+        String keyStructuralDependencies = "structuralDependencies" + getProjectName(project);
+        String keyLogicalDependencies = "logicalDependencies" + getProjectName(project);
 
         CredentialAttributes credentialAttributes = createCredentialAttributes(keyPivotalURL);
         Credentials credentials = new Credentials(keyPivotalURL, this.pivotalURL);
@@ -124,6 +158,14 @@ public class TaitiSettingsState {
 
         credentialAttributes = createCredentialAttributes(keyStepDefinitionsFolder);
         credentials = new Credentials(keyStepDefinitionsFolder, this.stepDefinitionsFolder);
+        PasswordSafe.getInstance().set(credentialAttributes, credentials);
+
+        credentialAttributes = createCredentialAttributes(keyStructuralDependencies);
+        credentials = new Credentials(keyStructuralDependencies, String.valueOf(this.structuralDependenciesEnabled));
+        PasswordSafe.getInstance().set(credentialAttributes, credentials);
+
+        credentialAttributes = createCredentialAttributes(keyLogicalDependencies);
+        credentials = new Credentials(keyLogicalDependencies, String.valueOf(this.logicalDependenciesEnabled));
         PasswordSafe.getInstance().set(credentialAttributes, credentials);
     }
 

@@ -1,5 +1,6 @@
 package br.edu.ufape.taiti.settings;
 
+import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBPasswordField;
 import com.intellij.ui.components.JBTextField;
@@ -22,6 +23,8 @@ public class TaitiSettingsComponent {
     private final JBTextField scenariosFolder;
     private final JBTextField stepDefinitionsFolder;
     private final JBTextField unityTestFolder;
+    private final JBCheckBox structuralDependenciesCheckBox;
+    private final JBCheckBox logicalDependenciesCheckBox;
 
     public TaitiSettingsComponent() {
         pivotalURLText = new JBTextField();
@@ -32,18 +35,26 @@ public class TaitiSettingsComponent {
         stepDefinitionsFolder = new JBTextField("features/step_definitions");
         unityTestFolder = new JBTextField("spec");
 
+        structuralDependenciesCheckBox = new JBCheckBox("Including structural dependencies between files");
+        logicalDependenciesCheckBox = new JBCheckBox("Including logical dependencies between files");
+
         mainPanel = FormBuilder.createFormBuilder()
                 .addLabeledComponent(new JLabel("<html><b>Project settings</b></html>"),new JSeparator(),0)
-                .addVerticalGap(10) // espaço em branco
+                .addVerticalGap(10)
                 .addLabeledComponent(new JBLabel("GitHub URL: "), githubURLText, 1, false)
                 .addLabeledComponent(new JBLabel("PivotalTracker URL: "), pivotalURLText, 1, false)
                 .addLabeledComponent(new JBLabel("PivotalTracker token: "), pivotalToken, 1, false)
-                .addVerticalGap(10) // espaço em branco
+                .addVerticalGap(10)
                 .addLabeledComponent(new JLabel("<html><b>Test settings</b></html>"),new JSeparator(),0)
-                .addVerticalGap(10) // espaço em branco
+                .addVerticalGap(10)
                 .addLabeledComponent(new JBLabel("Scenarios folder: "), scenariosFolder, 1, false)
                 .addLabeledComponent(new JBLabel("Step definitions folder: "), stepDefinitionsFolder, 1, false)
                 .addLabeledComponent(new JBLabel("Unity tests folder: "), unityTestFolder, 1, false)
+                .addVerticalGap(10)
+                .addLabeledComponent(new JLabel("<html><b>Code analysis settings</b></html>"), new JSeparator(), 0)
+                .addVerticalGap(10)
+                .addComponent(structuralDependenciesCheckBox)
+                .addComponent(logicalDependenciesCheckBox)
                 .addComponentFillVertically(new JPanel(), 0)
                 .getPanel();
 
@@ -102,6 +113,21 @@ public class TaitiSettingsComponent {
         unityTestFolder.setText(text);
     }
 
+    public boolean isStructuralDependenciesEnabled() {
+        return structuralDependenciesCheckBox.isSelected();
+    }
+
+    public void setStructuralDependenciesEnabled(boolean enabled) {
+        structuralDependenciesCheckBox.setSelected(enabled);
+    }
+
+    public boolean isLogicalDependenciesEnabled() {
+        return logicalDependenciesCheckBox.isSelected();
+    }
+
+    public void setLogicalDependenciesEnabled(boolean enabled) {
+        logicalDependenciesCheckBox.setSelected(enabled);
+    }
 
 }
 
