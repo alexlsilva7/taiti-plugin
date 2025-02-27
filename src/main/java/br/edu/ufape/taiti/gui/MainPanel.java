@@ -234,7 +234,24 @@ public class MainPanel {
     }
 
     private void initTable() {
-        table = new JBTable();
+        table = new JBTable() {
+            @Override
+            public Component prepareRenderer(javax.swing.table.TableCellRenderer renderer, int row, int column) {
+                Component c = super.prepareRenderer(renderer, row, column);
+                
+                // Se a tabela estiver vazia (apenas com o cabeçalho), mostra a mensagem centralizada
+                if (getModel().getRowCount() <= 1 && row == 0) {
+                    JLabel label = new JLabel("No tests selected. Select tests from the file tree.");
+                    label.setHorizontalAlignment(SwingConstants.CENTER);
+                    label.setForeground(JBColor.gray);
+                    label.setFont(label.getFont().deriveFont(12f));
+                    return label;
+                }
+                
+                return c;
+            }
+        };
+        
         table.setShowGrid(false);
         table.getTableHeader().setResizingAllowed(false);
         table.getTableHeader().setReorderingAllowed(false);
@@ -242,42 +259,58 @@ public class MainPanel {
         table.setFillsViewportHeight(true);
         table.setRowSelectionAllowed(false);
 
-        southPanel.add(new JScrollPane(table), BorderLayout.CENTER);
-
+        // Criar um painel para o botão e posicioná-lo corretamente
+        JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton removeScenarioBtn = new JButton("Remove");
-        removeScenarioBtn.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                ArrayList<TestRow> testRowsChecked = new ArrayList<>();
+        controlPanel.add(removeScenarioBtn);
+        
+        // Criar um painel para organizar a tabela e o painel de controles
+        JPanel tablePanel = new JPanel(new BorderLayout());
+        tablePanel.add(new JScrollPane(table), BorderLayout.CENTER);
+        tablePanel.add(controlPanel, BorderLayout.NORTH);
+        
+        // Adicionar o painel completo ao southPanel
+        southPanel.add(tablePanel, BorderLayout.CENTER);
 
-                // catch all rows checked
-                for (int r = 1; r < tableModel.getRowCount(); r++) {
-                    if ((boolean) tableModel.getValueAt(r, 0)) {
-                        String test = (String) tableModel.getValueAt(r, 1);
-                        TestRow testRow = tableModel.findTestRow(test);
-                        testRowsChecked.add(testRow);
+        // Implementar a ação do botão "Remove" com ActionListener
+        removeScenarioBtn.addActionListener(e -> {
+            ArrayList<TestRow> testRowsChecked = new ArrayList<>();
+
+            // Identificar todas as linhas marcadas
+            for (int r = 1; r < tableModel.getRowCount(); r++) {
+                if ((boolean) tableModel.getValueAt(r, 0)) {
+                    TestRow testRow = tableModel.getRow(r);
+                    testRowsChecked.add(testRow);
+                }
+            }
+            
+            // Desmarcar checkbox do cabeçalho
+            if (tableModel.getRowCount() > 0) {
+                tableModel.getRow(0).setCheckbox(false);
+            }
+            
+            // Remover todas as linhas marcadas
+            for (TestRow t : testRowsChecked) {
+                tableModel.removeRow(t);
+                
+                if (t.getFile() != null) {
+                    OpenFeatureFile openFeatureFile = repositoryOpenFeatureFile.getFeatureFile(t.getFile());
+                    if (openFeatureFile != null) {
+                        int deselectedLine = openFeatureFile.deselectLine(t.getTest());
+                        scenarios.remove(new ScenarioTestInformation(t.getFile().getAbsolutePath(), deselectedLine));
                     }
                 }
-                // remove all rows checked
-                tableModel.getRow(0).setCheckbox(false);
-                for (TestRow t : testRowsChecked) {
-                    tableModel.removeRow(t);
-                    OpenFeatureFile openFeatureFile = repositoryOpenFeatureFile.getFeatureFile(t.getFile());
-                    int deselectedLine = openFeatureFile.deselectLine(t.getTest());
-                    featureFileViewModel.fireTableDataChanged();
-
-                    scenarios.remove(new ScenarioTestInformation(t.getFile().getAbsolutePath(), deselectedLine));
-                }
+            }
+            
+            // Atualizar a visualização após todas as remoções
+            if (featureFileViewModel != null) {
+                featureFileViewModel.fireTableDataChanged();
             }
         });
 
-        JPanel btnPanel = new JPanel(new BorderLayout());
-        btnPanel.add(removeScenarioBtn, BorderLayout.EAST);
-        southPanel.add(btnPanel, BorderLayout.NORTH);
-
         tableModel = new TestsTableModel();
         table.setModel(tableModel);
-
+        
         tableModel.addRow(new TestRow(null, false, "Tests", 0));
         table.setRowHeight(40);
         table.getColumnModel().getColumn(0).setPreferredWidth(30);
@@ -285,6 +318,14 @@ public class MainPanel {
         table.getColumnModel().getColumn(0).setCellRenderer(new TestsTableRenderer());
         table.getColumnModel().getColumn(1).setCellRenderer(new TestsTableRenderer());
         table.getTableHeader().setUI(null);
+
+        // Adicionar listener de redimensionamento para ajustar largura da coluna
+        southPanel.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                table.getColumnModel().getColumn(1).setPreferredWidth(e.getComponent().getWidth() - 35);
+            }
+        });
     }
 
     private void configureTree() {
@@ -380,11 +421,5 @@ public class MainPanel {
         });
         treePanel.setLayout(new BorderLayout());
         southPanel.setLayout(new BorderLayout());
-        southPanel.addComponentListener(new ComponentAdapter() {
-            @Override
-            public void componentResized(ComponentEvent e) {
-                table.getColumnModel().getColumn(1).setPreferredWidth(e.getComponent().getWidth() - 35);
-            }
-        });
     }
 }
