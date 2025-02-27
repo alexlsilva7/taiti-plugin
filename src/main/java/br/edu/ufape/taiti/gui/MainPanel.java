@@ -33,13 +33,11 @@ import java.nio.file.Paths;
 public class MainPanel {
     private JPanel rootPanel;
     private JPanel centerPanel;
-    private JPanel northPanel;
     private JPanel southPanel;
     private JPanel treePanel;
 
     private JSplitPane mainSplit;
     private JSplitPane rightSplit;
-    private JSplitPane leftSplit;
 
     private TaitiTree tree;
 
@@ -141,7 +139,7 @@ public class MainPanel {
                     if (line.trim().toLowerCase().startsWith("scenario")) {
                         return line.trim();
                     } else {
-                        // se a linha 13 não for a linha do "Scenario", retorna a string bruta
+                        // se a linha não for a do "Scenario", retorna a string bruta
                         return line.trim();
                     }
                 }
@@ -152,7 +150,6 @@ public class MainPanel {
         }
         return "Scenario at line: " + lineNumber;
     }
-
 
     public void loadExistingScenarios(List<ScenarioTestInformation> existingScenarios) {
         Map<File, List<Integer>> scenariosByFile = new HashMap<>();
@@ -232,6 +229,14 @@ public class MainPanel {
         featureFileView.setDragEnabled(false);
         featureFileView.setRowSelectionAllowed(false);
 
+        // Adicionar painel de título para o centerPanel
+        JPanel centerTitlePanel = new JPanel(new BorderLayout());
+        JLabel centerTitleLabel = new JLabel("File Content");
+        centerTitleLabel.setFont(centerTitleLabel.getFont().deriveFont(Font.BOLD));
+        centerTitleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+        centerTitlePanel.add(centerTitleLabel, BorderLayout.WEST);
+        centerPanel.add(centerTitlePanel, BorderLayout.NORTH);
+
         centerPanel.add(new JScrollPane(featureFileView), BorderLayout.CENTER);
     }
 
@@ -249,7 +254,7 @@ public class MainPanel {
                         label.setForeground(JBColor.gray);
                         label.setFont(label.getFont().deriveFont(12f));
                         return label;
-                    }else if(column == 0){
+                    } else if(column == 0){
                         return new JLabel();
                     }
                 }
@@ -269,7 +274,7 @@ public class MainPanel {
         JPanel testManagementPanel = new JPanel(new BorderLayout(0, 10));
         testManagementPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         
-        // Criar painel de título
+        // Criar painel de título para Test Management
         JPanel titlePanel = new JPanel(new BorderLayout());
         JLabel titleLabel = new JLabel("Test Management");
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
@@ -343,7 +348,7 @@ public class MainPanel {
         table.getColumnModel().getColumn(0).setCellRenderer(new TestsTableRenderer());
         table.getColumnModel().getColumn(1).setCellRenderer(new TestsTableRenderer());
         table.getTableHeader().setUI(null);
-
+        
         // Adicionar listener de redimensionamento para ajustar largura da coluna
         southPanel.addComponentListener(new ComponentAdapter() {
             @Override
@@ -387,6 +392,13 @@ public class MainPanel {
 
         File featureDirectory = tree.findFeatureDirectory(projectPath);
         if (featureDirectory != null) {
+            // Adicionar painel de título para treePanel
+            JPanel treeTitlePanel = new JPanel(new BorderLayout());
+            JLabel treeTitleLabel = new JLabel("Features");
+            treeTitleLabel.setFont(treeTitleLabel.getFont().deriveFont(Font.BOLD));
+            treeTitleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+            treeTitlePanel.add(treeTitleLabel, BorderLayout.WEST);
+            treePanel.add(treeTitlePanel, BorderLayout.NORTH);
 
             // get every parent directory of features directory
             File parent = featureDirectory.getParentFile();
@@ -419,32 +431,40 @@ public class MainPanel {
     }
 
     private void configurePanels() {
+        // Reset borders
         rootPanel.setBorder(null);
-        centerPanel.setLayout(null);
-        mainSplit.setBorder(null);
-        leftSplit.setBorder(null);
-        northPanel.setBorder(null);
-        southPanel.setBorder(null);
         treePanel.setBorder(null);
+        centerPanel.setBorder(null);
+        southPanel.setBorder(null);
 
+        // Configure layouts
+        centerPanel.setLayout(new BorderLayout());
+        treePanel.setLayout(new BorderLayout());
+        southPanel.setLayout(new BorderLayout());
+
+        // Configure borders
         rootPanel.setBorder(BorderFactory.createLineBorder(JBColor.border()));
         centerPanel.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, JBColor.border()));
-        southPanel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, JBColor.border()));
-        leftSplit.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, JBColor.border()));
+        southPanel.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, JBColor.border()));
 
-        mainSplit.setDividerLocation(300);
+        // Configure main split (tree | right split)
+        mainSplit.setBorder(null);
+        mainSplit.setDividerLocation(250);
         mainSplit.setDividerSize(2);
-        leftSplit.setDividerLocation(400);
-        leftSplit.setDividerSize(2);
 
-        centerPanel.setLayout(new BorderLayout());
+        // Configure right split (center | south)
+        rightSplit.setBorder(null);
+        rightSplit.setDividerLocation(500);
+        rightSplit.setDividerSize(2);
+
+        // Add resize listener for center panel
         centerPanel.addComponentListener(new ComponentAdapter() {
             @Override
             public void componentResized(ComponentEvent e) {
-                featureFileView.setTableWidth(e.getComponent().getWidth());
+                if (featureFileView != null) {
+                    featureFileView.setTableWidth(e.getComponent().getWidth());
+                }
             }
         });
-        treePanel.setLayout(new BorderLayout());
-        southPanel.setLayout(new BorderLayout());
     }
 }

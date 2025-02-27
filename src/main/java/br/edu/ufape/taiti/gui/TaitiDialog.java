@@ -53,7 +53,7 @@ public class TaitiDialog extends DialogWrapper {
         prepareServices();
 
         setTitle("TAITIr - Add Tests to: " + selectedTask.getName());
-        setSize(1000,810);
+        setSize(1200,810); // Aumentei a largura para acomodar os 3 painéis
         init();
 
         if (selectedTask.hasScenarios()) {
