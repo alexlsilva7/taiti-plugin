@@ -38,6 +38,7 @@ public class MainPanel {
     private JPanel treePanel;
 
     private JSplitPane mainSplit;
+    private JSplitPane rightSplit;
     private JSplitPane leftSplit;
 
     private TaitiTree tree;
@@ -46,6 +47,7 @@ public class MainPanel {
     private TestsTableModel tableModel;
     private FeatureFileView featureFileView;
     private FeatureFileViewModel featureFileViewModel;
+    private JPanel selectedTestsPanel;
 
     private final ArrayList<ScenarioTestInformation> scenarios;
     private final RepositoryOpenFeatureFile repositoryOpenFeatureFile;
@@ -241,11 +243,15 @@ public class MainPanel {
                 
                 // Se a tabela estiver vazia (apenas com o cabeçalho), mostra a mensagem centralizada
                 if (getModel().getRowCount() <= 1 && row == 0) {
-                    JLabel label = new JLabel("No tests selected. Select tests from the file tree.");
-                    label.setHorizontalAlignment(SwingConstants.CENTER);
-                    label.setForeground(JBColor.gray);
-                    label.setFont(label.getFont().deriveFont(12f));
-                    return label;
+                    if(column == 1) {
+                        JLabel label = new JLabel("No tests selected. Select tests from the file tree.");
+                        label.setHorizontalAlignment(SwingConstants.CENTER);
+                        label.setForeground(JBColor.gray);
+                        label.setFont(label.getFont().deriveFont(12f));
+                        return label;
+                    }else if(column == 0){
+                        return new JLabel();
+                    }
                 }
                 
                 return c;
@@ -259,18 +265,37 @@ public class MainPanel {
         table.setFillsViewportHeight(true);
         table.setRowSelectionAllowed(false);
 
-        // Criar um painel para o botão e posicioná-lo corretamente
-        JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton removeScenarioBtn = new JButton("Remove");
+        // Criar painel principal para a seção de testes
+        JPanel testManagementPanel = new JPanel(new BorderLayout(0, 10));
+        testManagementPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Criar painel de título
+        JPanel titlePanel = new JPanel(new BorderLayout());
+        JLabel titleLabel = new JLabel("Test Management");
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+        titlePanel.add(titleLabel, BorderLayout.WEST);
+        
+        // Criar painel para o botão com borda e espaçamento
+        JPanel controlPanel = new JPanel();
+        controlPanel.setLayout(new BoxLayout(controlPanel, BoxLayout.X_AXIS));
+        controlPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
+        
+        JButton removeScenarioBtn = new JButton("Remove Selected Tests");
+        controlPanel.add(Box.createHorizontalGlue());
         controlPanel.add(removeScenarioBtn);
         
-        // Criar um painel para organizar a tabela e o painel de controles
-        JPanel tablePanel = new JPanel(new BorderLayout());
-        tablePanel.add(new JScrollPane(table), BorderLayout.CENTER);
-        tablePanel.add(controlPanel, BorderLayout.NORTH);
+        // Adicionar a tabela em um painel com scroll
+        JScrollPane tableScrollPane = new JScrollPane(table);
+        tableScrollPane.setBorder(BorderFactory.createLineBorder(JBColor.border()));
+        
+        // Organizar os componentes no painel principal
+        testManagementPanel.add(titlePanel, BorderLayout.NORTH);
+        testManagementPanel.add(tableScrollPane, BorderLayout.CENTER);
+        testManagementPanel.add(controlPanel, BorderLayout.SOUTH);
         
         // Adicionar o painel completo ao southPanel
-        southPanel.add(tablePanel, BorderLayout.CENTER);
+        southPanel.add(testManagementPanel, BorderLayout.CENTER);
 
         // Implementar a ação do botão "Remove" com ActionListener
         removeScenarioBtn.addActionListener(e -> {
