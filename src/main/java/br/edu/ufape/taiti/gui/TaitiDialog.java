@@ -38,6 +38,7 @@ public class TaitiDialog extends DialogWrapper {
 
     private final Project project;
     private boolean executed = false;
+    private boolean servicesReady = false;
 
     public TaitiDialog(Project project, TaskBarGUI taskBarGUI,  Task selectedTask) {
         super(true);
@@ -58,18 +59,18 @@ public class TaitiDialog extends DialogWrapper {
         if (selectedTask.hasScenarios()) {
             List<ScenarioTestInformation> scenarios = new ArrayList<>();
 
-            // Iterar pelos cenários retornados
+            // Iterate through returned scenarios
             for (LinkedHashMap<String, Serializable> scenario : selectedTask.getScenarios()) {
                 String filePath = (String) scenario.get("path");
                 List<Integer> lines = (List<Integer>) scenario.get("lines");
 
-                // Criar objetos ScenarioTestInformation para cada linha do cenário
+                // Create ScenarioTestInformation objects for each scenario line
                 for (int line : lines) {
                     scenarios.add(new ScenarioTestInformation(filePath, line));
                 }
             }
 
-            // Carregar os cenários convertidos no MainPanel
+            // Load the converted scenarios in MainPanel
             mainPanel.loadExistingScenarios(scenarios);
         }
     }
@@ -80,10 +81,18 @@ public class TaitiDialog extends DialogWrapper {
     }
     private void prepareServices() {
         TaitiSettingsState settings = TaitiSettingsState.getInstance(project);
-        settings.retrieveStoredCredentials(project);
-
-        taiti = new TaitiTool(project);
-        pivotalTracker = new PivotalTracker(settings.getToken(), settings.getPivotalURL(), project);
+        settings.retrieveStoredCredentials(project).thenRun(() -> {
+            try {
+                taiti = new TaitiTool(project);
+                pivotalTracker = new PivotalTracker(settings.getToken(), settings.getPivotalURL(), project);
+                servicesReady = true;
+            } catch (Exception e) {
+                JOptionPane.showMessageDialog(getRootPane(),
+                    "Error initializing services: " + e.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
+            }
+        });
     }
 
     @Override
@@ -93,6 +102,9 @@ public class TaitiDialog extends DialogWrapper {
 
     @Override
     protected @Nullable ValidationInfo doValidate() {
+        if (!servicesReady) {
+            return new ValidationInfo("The services are not ready yet. Please wait.", table);
+        }
         if (table.getRowCount() == 1) {
             return new ValidationInfo("Select at least one scenario.", table);
         }
@@ -118,11 +130,21 @@ public class TaitiDialog extends DialogWrapper {
             taskBarGUI.refresh();
             taiti.deleteScenariosFile();
         } catch (IOException e) {
-            System.out.println("Erro ao criar o arquivo!");
+            JOptionPane.showMessageDialog(getRootPane(),
+                "Error creating file: " + e.getMessage(),
+                "Error",
+                JOptionPane.ERROR_MESSAGE);
         } catch (HttpException e) {
-            System.out.println(e.getStatusText() + " - " + e.getStatusNumber());
+            JOptionPane.showMessageDialog(getRootPane(),
+                "Communication error: " + e.getStatusText() + " - " + e.getStatusNumber(),
+                "Error",
+                JOptionPane.ERROR_MESSAGE);
             taiti.deleteScenariosFile();
         } catch (InterruptedException e) {
+            JOptionPane.showMessageDialog(getRootPane(),
+                "Operation interrupted: " + e.getMessage(),
+                "Error",
+                JOptionPane.ERROR_MESSAGE);
             throw new RuntimeException(e);
         }
     }

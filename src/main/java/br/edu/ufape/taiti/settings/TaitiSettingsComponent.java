@@ -25,6 +25,9 @@ public class TaitiSettingsComponent {
     private final JBTextField unityTestFolder;
     private final JBCheckBox structuralDependenciesCheckBox;
     private final JBCheckBox logicalDependenciesCheckBox;
+    
+    // Painel para o campo de token e botão de teste
+    private final JPanel tokenPanel = new JPanel(new BorderLayout(5, 0));
 
     public TaitiSettingsComponent() {
         pivotalURLText = new JBTextField();
@@ -38,12 +41,15 @@ public class TaitiSettingsComponent {
         structuralDependenciesCheckBox = new JBCheckBox("Including structural dependencies between files");
         logicalDependenciesCheckBox = new JBCheckBox("Including logical dependencies between files");
 
+        // Configurar o campo de token dentro do tokenPanel
+        tokenPanel.add(pivotalToken, BorderLayout.CENTER);
+        
         mainPanel = FormBuilder.createFormBuilder()
                 .addLabeledComponent(new JLabel("<html><b>Project settings</b></html>"),new JSeparator(),0)
                 .addVerticalGap(10)
                 .addLabeledComponent(new JBLabel("GitHub URL: "), githubURLText, 1, false)
                 .addLabeledComponent(new JBLabel("PivotalTracker URL: "), pivotalURLText, 1, false)
-                .addLabeledComponent(new JBLabel("PivotalTracker token: "), pivotalToken, 1, false)
+                .addLabeledComponent(new JBLabel("PivotalTracker token: "), tokenPanel, 1, false)
                 .addVerticalGap(10)
                 .addLabeledComponent(new JLabel("<html><b>Test settings</b></html>"),new JSeparator(),0)
                 .addVerticalGap(10)
@@ -58,6 +64,15 @@ public class TaitiSettingsComponent {
                 .addComponentFillVertically(new JPanel(), 0)
                 .getPanel();
 
+    }
+    
+    /**
+     * Adiciona o botão de teste ao lado do campo de token
+     * 
+     * @param button O botão de teste de conexão
+     */
+    public void addTestConnectionButton(JButton button) {
+        tokenPanel.add(button, BorderLayout.EAST);
     }
 
     public JComponent getPreferredFocusedComponent() {

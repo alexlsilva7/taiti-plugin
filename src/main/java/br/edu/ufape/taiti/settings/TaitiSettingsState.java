@@ -4,9 +4,12 @@ import com.intellij.credentialStore.CredentialAttributes;
 import com.intellij.credentialStore.CredentialAttributesKt;
 import com.intellij.credentialStore.Credentials;
 import com.intellij.ide.passwordSafe.PasswordSafe;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectUtil;
 import com.intellij.openapi.vfs.VirtualFile;
+
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Esta classe é responsável por armazenar os estados das configurações do plugin.
@@ -65,64 +68,69 @@ public class TaitiSettingsState {
         return project.getService(TaitiSettingsState.class);
     }
 
-    public void retrieveStoredCredentials(Project project) {
-        String keyPivotalURL = "pivotalURL" + getProjectName(project);
-        String keyPivotalToken = "pivotalToken" + getProjectName(project);
-        String keyGithubURL = "githubURL" + getProjectName(project);
+    public CompletableFuture<Void> retrieveStoredCredentials(Project project) {
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        ApplicationManager.getApplication().executeOnPooledThread(() -> {
+            String keyPivotalURL = "pivotalURL" + getProjectName(project);
+            String keyPivotalToken = "pivotalToken" + getProjectName(project);
+            String keyGithubURL = "githubURL" + getProjectName(project);
 
-        String keyScenariosFolder = "scenariosFolder" + getProjectName(project);
-        String keyStepDefinitionsFolder = "stepDefinitionsFolder" + getProjectName(project);
-        String keyUnityTestFolder = "unityTestFolder" + getProjectName(project);
-        String keyStructuralDependencies = "structuralDependencies" + getProjectName(project);
-        String keyLogicalDependencies = "logicalDependencies" + getProjectName(project);
+            String keyScenariosFolder = "scenariosFolder" + getProjectName(project);
+            String keyStepDefinitionsFolder = "stepDefinitionsFolder" + getProjectName(project);
+            String keyUnityTestFolder = "unityTestFolder" + getProjectName(project);
+            String keyStructuralDependencies = "structuralDependencies" + getProjectName(project);
+            String keyLogicalDependencies = "logicalDependencies" + getProjectName(project);
 
-        CredentialAttributes credentialAttributes = createCredentialAttributes(keyPivotalURL);
-        Credentials credentials = PasswordSafe.getInstance().get(credentialAttributes);
-        if (credentials != null) {
-            this.pivotalURL = credentials.getPasswordAsString();
-        }
+            CredentialAttributes credentialAttributes = createCredentialAttributes(keyPivotalURL);
+            Credentials credentials = PasswordSafe.getInstance().get(credentialAttributes);
+            if (credentials != null) {
+                this.pivotalURL = credentials.getPasswordAsString();
+            }
 
-        credentialAttributes = createCredentialAttributes(keyPivotalToken);
-        credentials = PasswordSafe.getInstance().get(credentialAttributes);
-        if (credentials != null) {
-            this.token = credentials.getPasswordAsString();
-        }
+            credentialAttributes = createCredentialAttributes(keyPivotalToken);
+            credentials = PasswordSafe.getInstance().get(credentialAttributes);
+            if (credentials != null) {
+                this.token = credentials.getPasswordAsString();
+            }
 
-        credentialAttributes = createCredentialAttributes(keyGithubURL);
-        credentials = PasswordSafe.getInstance().get(credentialAttributes);
-        if (credentials != null) {
-            this.githubURL = credentials.getPasswordAsString();
-        }
+            credentialAttributes = createCredentialAttributes(keyGithubURL);
+            credentials = PasswordSafe.getInstance().get(credentialAttributes);
+            if (credentials != null) {
+                this.githubURL = credentials.getPasswordAsString();
+            }
 
-        credentialAttributes = createCredentialAttributes(keyStepDefinitionsFolder);
-        credentials = PasswordSafe.getInstance().get(credentialAttributes);
-        if (credentials != null) {
-            this.stepDefinitionsFolder = credentials.getPasswordAsString();
-        }
+            credentialAttributes = createCredentialAttributes(keyStepDefinitionsFolder);
+            credentials = PasswordSafe.getInstance().get(credentialAttributes);
+            if (credentials != null) {
+                this.stepDefinitionsFolder = credentials.getPasswordAsString();
+            }
 
-        credentialAttributes = createCredentialAttributes(keyUnityTestFolder);
-        credentials = PasswordSafe.getInstance().get(credentialAttributes);
-        if (credentials != null) {
-            this.unityTestFolder = credentials.getPasswordAsString();
-        }
+            credentialAttributes = createCredentialAttributes(keyUnityTestFolder);
+            credentials = PasswordSafe.getInstance().get(credentialAttributes);
+            if (credentials != null) {
+                this.unityTestFolder = credentials.getPasswordAsString();
+            }
 
-        credentialAttributes = createCredentialAttributes(keyScenariosFolder);
-        credentials = PasswordSafe.getInstance().get(credentialAttributes);
-        if (credentials != null) {
-            this.scenariosFolder = credentials.getPasswordAsString();
-        }
+            credentialAttributes = createCredentialAttributes(keyScenariosFolder);
+            credentials = PasswordSafe.getInstance().get(credentialAttributes);
+            if (credentials != null) {
+                this.scenariosFolder = credentials.getPasswordAsString();
+            }
 
-        credentialAttributes = createCredentialAttributes(keyStructuralDependencies);
-        credentials = PasswordSafe.getInstance().get(credentialAttributes);
-        if (credentials != null) {
-            this.structuralDependenciesEnabled = Boolean.parseBoolean(credentials.getPasswordAsString());
-        }
+            credentialAttributes = createCredentialAttributes(keyStructuralDependencies);
+            credentials = PasswordSafe.getInstance().get(credentialAttributes);
+            if (credentials != null) {
+                this.structuralDependenciesEnabled = Boolean.parseBoolean(credentials.getPasswordAsString());
+            }
 
-        credentialAttributes = createCredentialAttributes(keyLogicalDependencies);
-        credentials = PasswordSafe.getInstance().get(credentialAttributes);
-        if (credentials != null) {
-            this.logicalDependenciesEnabled = Boolean.parseBoolean(credentials.getPasswordAsString());
-        }
+            credentialAttributes = createCredentialAttributes(keyLogicalDependencies);
+            credentials = PasswordSafe.getInstance().get(credentialAttributes);
+            if (credentials != null) {
+                this.logicalDependenciesEnabled = Boolean.parseBoolean(credentials.getPasswordAsString());
+            }
+            future.complete(null);
+        });
+        return future;
     }
 
     public void storeCredentials(Project project) {

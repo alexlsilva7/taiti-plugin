@@ -1,5 +1,6 @@
 package br.edu.ufape.taiti.settings;
 
+import br.edu.ufape.taiti.service.PivotalTracker;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.project.Project;
@@ -8,6 +9,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jsoup.internal.StringUtil;
 
 import javax.swing.*;
+import java.awt.*;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -42,6 +44,79 @@ public class TaitiSettingsConfigurable implements Configurable {
     @Override
     public JComponent createComponent() {
         component = new TaitiSettingsComponent();
+        
+        // Add test connection button next to token field
+        JButton testButton = new JButton("Test Connection");
+        testButton.setToolTipText("Test PivotalTracker connection with current credentials");
+        testButton.addActionListener(e -> {
+            if (StringUtil.isBlank(component.getPivotalURLText()) ||
+                StringUtil.isBlank(component.getPivotalToken())) {
+                JOptionPane.showMessageDialog(
+                    component.getPanel(),
+                    "Please fill in both PivotalTracker URL and token fields.",
+                    "Validation Error",
+                    JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+
+            try {
+                new URL(component.getPivotalURLText()).toURI();
+                String regex = "https://[w]{3}\\.pivotaltracker\\.com/n/projects/\\d+";
+                if (!component.getPivotalURLText().matches(regex)) {
+                    throw new MalformedURLException();
+                }
+            } catch (MalformedURLException | URISyntaxException ex) {
+                JOptionPane.showMessageDialog(
+                    component.getPanel(),
+                    "The PivotalTracker URL is malformed.\nExample: https://www.pivotaltracker.com/n/projects/{project_id}",
+                    "URL Error",
+                    JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+
+            PivotalTracker pivotalTracker = new PivotalTracker(
+                component.getPivotalToken(),
+                component.getPivotalURLText(),
+                project
+            );
+
+            int status = pivotalTracker.checkStatus();
+            if (status == 200) {
+                JOptionPane.showMessageDialog(
+                    component.getPanel(),
+                    "Connection successful!",
+                    "Success",
+                    JOptionPane.INFORMATION_MESSAGE
+                );
+            } else if (status == 403) {
+                JOptionPane.showMessageDialog(
+                    component.getPanel(),
+                    "Invalid credentials. Please check your token.",
+                    "Authentication Error",
+                    JOptionPane.ERROR_MESSAGE
+                );
+            } else if (status == 404) {
+                JOptionPane.showMessageDialog(
+                    component.getPanel(),
+                    "Project not found. Please verify if the project exists and if you have access to it.",
+                    "Project Error",
+                    JOptionPane.ERROR_MESSAGE
+                );
+            } else {
+                JOptionPane.showMessageDialog(
+                    component.getPanel(),
+                    "Connection failed. Status code: " + status,
+                    "Connection Error",
+                    JOptionPane.ERROR_MESSAGE
+                );
+            }
+        });
+
+        // Solicite ao componente para adicionar o botão de teste ao lado do campo de token
+        component.addTestConnectionButton(testButton);
+        
         return component.getPanel();
     }
 
