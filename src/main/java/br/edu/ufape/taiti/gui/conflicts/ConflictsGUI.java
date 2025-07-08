@@ -164,7 +164,7 @@ public class ConflictsGUI {
 
             String stringConflicts = String.join(" \n", conflictsPath);
 
-            int taskId = currentTask.getId();
+            int taskId = Integer.parseInt(currentTask.getId());
             String taskDescription = currentTask.getName();
             String taskUrl = currentTask.getUrl();
 

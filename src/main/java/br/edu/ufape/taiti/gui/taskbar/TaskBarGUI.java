@@ -1,14 +1,14 @@
 package br.edu.ufape.taiti.gui.taskbar;
 
-import br.edu.ufape.taiti.exceptions.HttpException;
+import br.edu.ufape.taiti.exceptions.HttpException; // May need to adapt or replace with TrelloApiException
 import br.edu.ufape.taiti.gui.TaitiDialog;
 import br.edu.ufape.taiti.gui.conflicts.ConflictsGUI;
-import br.edu.ufape.taiti.service.PivotalTracker;
-import br.edu.ufape.taiti.service.Stories;
-import br.edu.ufape.taiti.service.Task;
+import br.edu.ufape.taiti.service.TrelloService; // Changed from PivotalTracker
+import br.edu.ufape.taiti.service.Stories;      // This class will need adaptation for Trello
+import br.edu.ufape.taiti.service.Task;         // This class will need adaptation for Trello
 import br.edu.ufape.taiti.settings.TaitiSettingsState;
 import br.ufpe.cin.tan.conflict.ConflictAnalyzer;
-import br.ufpe.cin.tan.conflict.PlannedTask;
+import br.ufpe.cin.tan.conflict.PlannedTask; // This might relate to how Tasks are structured
 
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
@@ -24,11 +24,9 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
-
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableRowSorter;
-
 import java.awt.*;
 import java.awt.event.*;
 import java.io.IOException;
@@ -37,13 +35,14 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 
 public class TaskBarGUI {
 
     private DefaultTableModel modelo1;
     private DefaultTableModel modelo2;
-    private JPanel TaskBar;
+    private JPanel TaskBar; // Main panel for the taskbar content once loaded
     private JPanel buttonsPanel;
     private JButton refreshButton;
     private JTextField txtSearch;
@@ -51,26 +50,31 @@ public class TaskBarGUI {
     private JTable unstartedTable;
     private JTable startedTable;
     private JPanel tables;
-    private JPanel content;
-    private JPanel configPanel;
-    private JLabel messageLabel;
+    private JPanel content; // The root panel that switches between loading, config, and TaskBar
+    private JPanel configPanel; // Panel shown when settings are missing/invalid
+    private JLabel messageLabel; // Label within configPanel to show error messages
 
-    private ArrayList<Task> myUnstartedStoriesList;
-
-    private ArrayList<Task> otherPendingStoriesList; // Pending = started + unstarted
+    private ArrayList<Task> myUnstartedTasksList; // Changed from Stories to Tasks for clarity
+    private ArrayList<Task> otherPendingTasksList; // Pending = started + unstarted
 
     private final Project project;
-    static public ConflictAnalyzer conflictAnalyzer;
+    static public ConflictAnalyzer conflictAnalyzer; // Consider if this needs changes for Trello data
     private final LoadingScreen loading;
+
+    // Pattern for validating Trello Board URLs (optional, TrelloService might handle ID extraction)
+    private static final Pattern TRELLO_BOARD_URL_PATTERN = Pattern.compile("^https?://trello\\.com/b/([a-zA-Z0-9]+)(?:/[^/]+)?$");
+    private static final Pattern TRELLO_ID_PATTERN = Pattern.compile("^[a-zA-Z0-9]+$");
+
 
     private JPanel createConfigPanel() {
         configPanel = new JPanel();
         configPanel.setLayout(new BorderLayout());
+        configPanel.setName("ConfigPanel");
 
         JPanel centerPanel = new JPanel();
         centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
 
-        messageLabel = new JLabel("Configure your Pivotal Tracker credentials to start");
+        messageLabel = new JLabel("Configure your Trello credentials and Board URL/ID to start.");
         messageLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         messageLabel.setForeground(JBColor.RED);
 
@@ -78,11 +82,11 @@ public class TaskBarGUI {
         configButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         configButton.addActionListener(e -> {
             com.intellij.openapi.options.ShowSettingsUtil.getInstance().showSettingsDialog(
-                    project, "TAITIr");
-            // Após fechar as configurações, tenta recarregar
+                    project, "TAITI"); // Display name of the settings
+            // After closing settings, attempt to reload
             ApplicationManager.getApplication().invokeLater(() -> {
                 changeJpanel(loading);
-                configTaskList();
+                checkSettingsAndLoad(); // Renamed for clarity
             });
         });
 
@@ -100,66 +104,150 @@ public class TaskBarGUI {
         this.project = project;
         conflictAnalyzer = new ConflictAnalyzer();
 
-        // Inicializa os componentes
+        this.myUnstartedTasksList = new ArrayList<>();
+        this.otherPendingTasksList = new ArrayList<>();
+
         loading = new LoadingScreen();
+        loading.setName("LoadingScreen");
+
         content = new JPanel();
         content.setLayout(new BorderLayout());
 
-        // Inicializando o painel de configuração
-        createConfigPanel();
+        createConfigPanel(); // Initialize configPanel
 
-        // Verificar as credenciais antes de mostrar qualquer coisa
+        // Initial check for settings
+        checkSettingsAndLoad();
+    }
+
+    private void checkSettingsAndLoad() {
         TaitiSettingsState settings = TaitiSettingsState.getInstance(project);
         settings.retrieveStoredCredentials(project).thenRun(() -> {
             ApplicationManager.getApplication().invokeLater(() -> {
-                System.out.println("Token: " + settings.getToken());
-                System.out.println("PivotalURL: " + settings.getPivotalURL());
+                String trelloApiKey = settings.getTrelloApiKey();
+                String trelloServerToken = settings.getTrelloServerToken();
+                String trelloBoardUrlOrId = settings.getTrelloBoardUrlOrId();
+                String githubURL = settings.getGithubURL(); // Keep GitHub URL if still needed
 
-                PivotalTracker pivotalTracker = new PivotalTracker(settings.getToken(), settings.getPivotalURL(), project);
-                int status = pivotalTracker.checkStatus();
-
-                if (settings.getToken().isEmpty() || settings.getPivotalURL().isEmpty() || settings.getGithubURL().isEmpty()) {
-                    changeJpanel(configPanel);
-                } else if (status == 403) {
-                    changeJpanel(configPanel);
-                    messageLabel.setText("Invalid credentials. Please check your settings.");
+                // Check if essential Trello settings are present
+                if (isBlank(trelloApiKey) || isBlank(trelloServerToken) || isBlank(trelloBoardUrlOrId) || isBlank(githubURL)) {
+                    messageLabel.setText("Please configure Trello API Key, Server Token, Board URL/ID, and GitHub URL in settings.");
                     messageLabel.setForeground(JBColor.RED);
-                } else {
-                    content.add(loading, BorderLayout.CENTER);
-                    initializeComponents();
-                    configTaskList();
+                    changeJpanel(configPanel);
+                    return;
+                }
+
+                // Validate Trello Board URL/ID format (basic)
+                if (!isValidTrelloBoardUrlOrId(trelloBoardUrlOrId)) {
+                    messageLabel.setText("Invalid Trello Board URL/ID format. Please check settings.");
+                    messageLabel.setForeground(JBColor.RED);
+                    changeJpanel(configPanel);
+                    return;
+                }
+
+                TrelloService trelloService = new TrelloService(trelloApiKey, trelloServerToken, trelloBoardUrlOrId, project);
+                try {
+                    int status = trelloService.checkBoardStatus(); // Assumes TrelloService has this method
+
+                    if (status == 200) {
+                        if (TaskBar == null) { // Initialize UI components only once if connection is OK
+                            initializeUIComponents(); // Initialize tables, buttons etc.
+                        }
+                        changeJpanel(loading); // Show loading screen while fetching tasks
+                        loadTasksFromTrello(); // Proceed to load tasks
+                    } else if (status == 401) { // Unauthorized for Trello
+                        messageLabel.setText("Invalid Trello API Key or Server Token. Please check your settings.");
+                        messageLabel.setForeground(JBColor.RED);
+                        changeJpanel(configPanel);
+                    } else if (status == 404) { // Board not found for Trello
+                        messageLabel.setText("Trello Board not found or access denied. Please check Board URL/ID and permissions.");
+                        messageLabel.setForeground(JBColor.RED);
+                        changeJpanel(configPanel);
+                    } else {
+                        messageLabel.setText("Failed to connect to Trello. Status: " + status + ". Check settings.");
+                        messageLabel.setForeground(JBColor.RED);
+                        changeJpanel(configPanel);
+                    }
+                } catch (IOException | InterruptedException e) {
+                    messageLabel.setText("Error connecting to Trello: " + e.getMessage());
+                    messageLabel.setForeground(JBColor.RED);
+                    changeJpanel(configPanel);
+                    Thread.currentThread().interrupt();
                 }
             });
+        }).exceptionally(ex -> {
+            ApplicationManager.getApplication().invokeLater(() -> {
+                messageLabel.setText("Error retrieving settings: " + ex.getMessage());
+                messageLabel.setForeground(JBColor.RED);
+                changeJpanel(configPanel);
+            });
+            return null;
         });
     }
+    private boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
+    }
 
-    // Novo método para inicializar os componentes após verificação de credenciais
-    private void initializeComponents() {
+    private boolean isValidTrelloBoardUrlOrId(String input) {
+        if (isBlank(input)) return false;
+        // TrelloService constructor will handle parsing, this is a pre-check
+        return TRELLO_BOARD_URL_PATTERN.matcher(input).matches() || TRELLO_ID_PATTERN.matcher(input).matches();
+    }
+
+
+    // Initializes the main UI components (tables, search, buttons)
+    private void initializeUIComponents() {
+        // TaskBar is the main panel holding tables and search, initialized from the .form file
+        // If TaskBar is not null, it means it was already inflated by IntelliJ's UI designer.
+        // We just need to ensure its sub-components are configured.
+        if (TaskBar == null) {
+            // This case should ideally not happen if the .form is correctly linked.
+            // For robustness, one might inflate it programmatically or show an error.
+            // For now, we assume TaskBar (and its children like unstartedTable, startedTable, txtSearch)
+            // are already initialized by the UI designer when TaskBarGUI instance is created.
+            // If they are null here, it indicates a problem with the .form binding.
+            System.err.println("WARNING: TaskBar panel is null in initializeUIComponents. Creating components programmatically as fallback.");
+            // Fallback: create a simple panel to avoid NullPointerExceptions, though UI will be broken.
+            TaskBar = new JPanel(new BorderLayout());
+            TaskBar.add(new JLabel("Error: UI Components not loaded."), BorderLayout.CENTER);
+            TaskBar.setName("TaskBarError");
+            // Initialize other components to avoid NPEs, though they won't be functional.
+            unstartedTable = new JTable();
+            startedTable = new JTable();
+            txtSearch = new JTextField();
+            refreshButton = new JButton("Refresh");
+            buttonsPanel = new JPanel();
+            buttonsPanel.add(refreshButton);
+            tables = new JPanel(new GridLayout(0,1));
+            tables.add(new JScrollPane(unstartedTable));
+            tables.add(new JScrollPane(startedTable));
+            TaskBar.add(buttonsPanel, BorderLayout.NORTH);
+            TaskBar.add(tables, BorderLayout.CENTER);
+
+        } else {
+            TaskBar.setName("TaskBar"); // For debugging changeJpanel
+        }
+
+
         addPlaceHolderStyle(txtSearch);
-        myUnstartedStoriesList = new ArrayList<>();
-        otherPendingStoriesList = new ArrayList<>();
+        myUnstartedTasksList = new ArrayList<>();
+        otherPendingTasksList = new ArrayList<>();
 
         modelo1 = new DefaultTableModel(null, new String[]{"<html><b>My unstarted tasks</b></html>", "<html><b>Conflict Rate</b></html>"}) {
             @Override
             public boolean isCellEditable(int row, int column) {
-                return false; // Tornar todas as células não editáveis
+                return false;
             }
         };
         unstartedTable.setModel(modelo1);
-
-        // Definir a largura da segunda coluna como 20 pixels
         unstartedTable.getColumnModel().getColumn(1).setMaxWidth(100);
-
-        //centralizar os numeros de Scenarios
-        TableColumnModel columns = unstartedTable.getColumnModel();
         DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
         centerRenderer.setHorizontalAlignment(JLabel.CENTER);
-        columns.getColumn(1).setCellRenderer(centerRenderer);
+        unstartedTable.getColumnModel().getColumn(1).setCellRenderer(centerRenderer);
 
         modelo2 = new DefaultTableModel(null, new String[]{"<html><b>Potential conflict-inducing tasks</b></html>"}) {
             @Override
             public boolean isCellEditable(int row, int column) {
-                return false; // Tornar todas as células não editáveis
+                return false;
             }
         };
         startedTable.setModel(modelo2);
@@ -173,13 +261,8 @@ public class TaskBarGUI {
             @Override
             public void keyReleased(KeyEvent e) {
                 super.keyReleased(e);
-                TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(modelo1);
-                unstartedTable.setRowSorter(sorter);
-                sorter.setRowFilter(RowFilter.regexFilter(txtSearch.getText()));
-
-                TableRowSorter<DefaultTableModel> sorter2 = new TableRowSorter<>(modelo2);
-                startedTable.setRowSorter(sorter2);
-                sorter2.setRowFilter(RowFilter.regexFilter(txtSearch.getText()));
+                filterTable(unstartedTable, modelo1, txtSearch.getText());
+                filterTable(startedTable, modelo2, txtSearch.getText());
             }
         });
 
@@ -187,47 +270,58 @@ public class TaskBarGUI {
             @Override
             public void focusGained(FocusEvent e) {
                 super.focusGained(e);
-                txtSearch.setText(null);
-                txtSearch.requestFocus();
-                //remove placeholder style
-                removePlaceHolderStyle(txtSearch);
+                if ("Search by task name".equals(txtSearch.getText())) {
+                    txtSearch.setText("");
+                    removePlaceHolderStyle(txtSearch);
+                }
             }
-        });
-        txtSearch.addFocusListener(new FocusAdapter() {
+
             @Override
             public void focusLost(FocusEvent e) {
                 super.focusLost(e);
-                if (txtSearch.getText().length() == 0) {
+                if (txtSearch.getText().isEmpty()) {
                     addPlaceHolderStyle(txtSearch);
                     txtSearch.setText("Search by task name");
                 }
             }
         });
 
+        // Tooltips and Mouse Listeners (adapted for 'Task' object)
+        configureTableMouseListeners();
+    }
+
+    private void filterTable(JTable table, DefaultTableModel model, String searchText) {
+        TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(model);
+        table.setRowSorter(sorter);
+        if (searchText == null || searchText.trim().isEmpty() || "Search by task name".equals(searchText)) {
+            sorter.setRowFilter(null);
+        } else {
+            sorter.setRowFilter(RowFilter.regexFilter("(?i)" + Pattern.quote(searchText))); // Case-insensitive
+        }
+    }
+
+
+    private void configureTableMouseListeners() {
         unstartedTable.addMouseMotionListener(new MouseMotionAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
                 int row = unstartedTable.rowAtPoint(e.getPoint());
-                int column = unstartedTable.columnAtPoint(e.getPoint());
-                if (row > -1 && column > -1) {
-                    boolean hasScenarios = myUnstartedStoriesList.get(row).hasScenarios();
-                    if (hasScenarios) {
-                        unstartedTable.setToolTipText("<html>" +
-                                "Task Name: " + myUnstartedStoriesList.get(row).getStoryName() + "<br>" +
-                                "Conflict Rate: " + myUnstartedStoriesList.get(row).getConflictRate() + "%<br>" +
-                                "Owner: " + myUnstartedStoriesList.get(row).getPersonName() + "<br>" +
-                                "</html>");
-                    } else {
-                        unstartedTable.setToolTipText("<html>" +
-                                "Task Name: " + myUnstartedStoriesList.get(row).getStoryName() + "<br>" +
-                                "Owner: " + myUnstartedStoriesList.get(row).getPersonName() + "<br>" +
-                                "Please add tests to calculate the conflict rate." +
-                                "</html>");
+                if (row > -1) {
+                    int modelRow = unstartedTable.convertRowIndexToModel(row); // Important for sorted tables
+                    if (modelRow < myUnstartedTasksList.size()) {
+                        Task task = myUnstartedTasksList.get(modelRow);
+                        String tooltip = "<html>Task Name: " + task.getName() + "<br>Owner: " + task.getPersonName();
+                        if (task.hasScenarios()) {
+                            tooltip += "<br>Conflict Rate: " + task.getConflictRate() + "%";
+                        } else {
+                            tooltip += "<br>Please add tests to calculate the conflict rate.";
+                        }
+                        tooltip += "</html>";
+                        unstartedTable.setToolTipText(tooltip);
                     }
                 } else {
                     unstartedTable.setToolTipText(null);
                 }
-
             }
         });
 
@@ -235,11 +329,14 @@ public class TaskBarGUI {
             @Override
             public void mouseMoved(MouseEvent e) {
                 int row = startedTable.rowAtPoint(e.getPoint());
-                int column = startedTable.columnAtPoint(e.getPoint());
-                if (row > -1 && column > -1) {
-                    startedTable.setToolTipText("<html>" + otherPendingStoriesList.get(row).getStoryName() +
-                            "<br>TaskID: #" + otherPendingStoriesList.get(row).getId() +
-                            "<br>Owner: " + otherPendingStoriesList.get(row).getPersonName() + "</html>");
+                if (row > -1) {
+                    int modelRow = startedTable.convertRowIndexToModel(row);
+                    if (modelRow < otherPendingTasksList.size()) {
+                        Task task = otherPendingTasksList.get(modelRow);
+                        startedTable.setToolTipText("<html>" + task.getName() +
+                                "<br>TaskID: #" + task.getId() + // Assuming Task has getId() for Trello card ID
+                                "<br>Owner: " + task.getPersonName() + "</html>");
+                    }
                 } else {
                     startedTable.setToolTipText(null);
                 }
@@ -249,90 +346,64 @@ public class TaskBarGUI {
         unstartedTable.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 2) { // clique duplo
-                    int index = unstartedTable.getSelectedRow();
-                    if (index < 0 || index >= myUnstartedStoriesList.size()) {
-                        return;
-                    }
-                    Task task = myUnstartedStoriesList.get(index);
+                if (e.getClickCount() == 2) {
+                    int viewRow = unstartedTable.getSelectedRow();
+                    if (viewRow < 0) return;
+                    int modelRow = unstartedTable.convertRowIndexToModel(viewRow);
+                    if (modelRow < 0 || modelRow >= myUnstartedTasksList.size()) return;
+
+                    Task task = myUnstartedTasksList.get(modelRow);
 
                     if (!task.hasScenarios()) {
-                        // Agora passamos a task selecionada para o TaitiDialog
                         TaitiDialog taitiDialog = new TaitiDialog(project, TaskBarGUI.this, task);
                         taitiDialog.show();
                     } else {
-                        // Lógica pré-existente para exibir conflitos
                         ToolWindowManager toolWindowManager = ToolWindowManager.getInstance(project);
                         ToolWindow myToolWindow = toolWindowManager.getToolWindow("Conflicts");
-
                         String text = "Conflict table for task \"" + task.getName() + "\" which contains "
                                 + task.getConflictRate() + "% conflict rate.";
-
                         ConflictsGUI.setLabel(text);
-                        ConflictsGUI.fillTable(task, conflictAnalyzer, getOtherPendingStoriesList());
-
-                        if (myToolWindow != null) {
-                            myToolWindow.show(null);
-                        }
+                        ConflictsGUI.fillTable(task, conflictAnalyzer, getOtherPendingTasksList());
+                        if (myToolWindow != null) myToolWindow.show(null);
                     }
                 }
             }
-        });
 
-        unstartedTable.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                // Detectar o botão direito do mouse (clique simples no Windows é BUTTON3)
-                if (e.isPopupTrigger()) {
-                    showPopup(e);
-                }
+                if (e.isPopupTrigger()) showPopup(e);
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
-                // Em alguns sistemas (como macOS), o popup é disparado no mouseReleased.
-                if (e.isPopupTrigger()) {
-                    showPopup(e);
-                }
+                if (e.isPopupTrigger()) showPopup(e);
             }
 
             private void showPopup(MouseEvent e) {
-                int row = unstartedTable.rowAtPoint(e.getPoint());
-                if (row < 0 || row >= myUnstartedStoriesList.size()) {
-                    return;
-                }
+                int viewRow = unstartedTable.rowAtPoint(e.getPoint());
+                if (viewRow < 0) return;
+                int modelRow = unstartedTable.convertRowIndexToModel(viewRow);
 
-                // Seleciona a linha clicada (para evidenciar visualmente)
-                unstartedTable.setRowSelectionInterval(row, row);
+                if (modelRow < 0 || modelRow >= myUnstartedTasksList.size()) return;
 
-                Task task = myUnstartedStoriesList.get(row);
+                unstartedTable.setRowSelectionInterval(viewRow, viewRow); // Select the row for visual feedback
+                Task task = myUnstartedTasksList.get(modelRow);
 
-                // Verifica se a tarefa possui cenários
                 if (task.hasScenarios()) {
-                    // Criar o menu de contexto
                     JPopupMenu popupMenu = new JPopupMenu();
-
                     JMenuItem editTestsItem = new JMenuItem("Edit tests");
                     editTestsItem.addActionListener(evt -> {
-                        // Abre o TaitiDialog para edição da mesma forma que ao adicionar,
-                        // porém agora carregando os cenários existentes.
                         TaitiDialog taitiDialog = new TaitiDialog(project, TaskBarGUI.this, task);
-
-                        // Carrega os cenários existentes no painel principal
-                        // Aqui assumimos que a Task possui um método para converter seus cenários
-                        // em uma lista de ScenarioTestInformation.
-
-
+                        // Scenarios should be loaded by TaitiDialog constructor if task.hasScenarios()
                         taitiDialog.show();
-                        taitiDialog.getMainPanel().loadExistingScenarios(task.toScenarioTestInformationList());
                     });
                     popupMenu.add(editTestsItem);
 
                     JMenuItem removeTestsItem = new JMenuItem("Remove tests");
                     removeTestsItem.addActionListener(evt -> {
                         int result = JOptionPane.showConfirmDialog(
-                                TaskBar,
-                                "Are you sure you want to remove tests for this task?",
+                                TaskBar, // Parent component for the dialog
+                                "Are you sure you want to remove tests for this Trello card?",
                                 "Confirm Remove Tests",
                                 JOptionPane.YES_NO_OPTION);
                         if (result == JOptionPane.YES_OPTION) {
@@ -340,240 +411,225 @@ public class TaskBarGUI {
                             TaitiSettingsState settings = TaitiSettingsState.getInstance(project);
                             settings.retrieveStoredCredentials(project).thenRun(() -> {
                                 ApplicationManager.getApplication().invokeLater(() -> {
-                                    PivotalTracker pivotalTracker = new PivotalTracker(settings.getToken(), settings.getPivotalURL(), project);
+                                    TrelloService trelloSvc = new TrelloService(
+                                            settings.getTrelloApiKey(),
+                                            settings.getTrelloServerToken(),
+                                            settings.getTrelloBoardUrlOrId(),
+                                            project);
                                     try {
-                                        pivotalTracker.deleteScenarios(String.valueOf(task.getId()));
-                                        refresh();
-                                    } catch (HttpException | InterruptedException | IOException e1) {
+                                        // Assuming TrelloService has a method like deleteTaitiScenarios
+                                        // This method would delete the TAITI comment and related attachment
+                                        trelloSvc.deleteTaitiScenarios(String.valueOf(task.getId())); // task.getId() is Trello Card ID
+                                        refresh(); // Refresh the task list
+                                    } catch (IOException e1) {
                                         e1.printStackTrace();
-                                        changeJpanel(TaskBar);
-                                        JOptionPane.showMessageDialog(content, "Error removing tests: " + e1.getMessage());
+                                        changeJpanel(TaskBar); // Show TaskBar again on error
+                                        JOptionPane.showMessageDialog(content, "Error removing tests: " + e1.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                                     }
                                 });
+                            }).exceptionally(ex -> {
+                                ApplicationManager.getApplication().invokeLater(() -> {
+                                    changeJpanel(TaskBar);
+                                    JOptionPane.showMessageDialog(content, "Error retrieving settings for removing tests: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                                });
+                                return null;
                             });
                         }
                     });
-
                     popupMenu.add(removeTestsItem);
                     popupMenu.show(unstartedTable, e.getX(), e.getY());
                 }
             }
         });
-
-        //configRefreshTask(); TODO: Desabilitado por questões de performance
-        // Iniciar o processamento inicial em segundo plano
-        configTaskList();
     }
 
-    private void configRefreshTask() {
-        /*
-         * Essa parte é responsável pelo Refresh de tempo em tempo
-         */
-        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
-        // Crie uma instância de Runnable que representa a tarefa a ser executada periodicamente
-        Runnable refreshTask = () -> {
-            changeJpanel(loading);
-            refresh();
-        };
-        // Agende a tarefa para ser executada inicialmente após 15 minutos e repetidamente a cada 15 minutos
-        executor.scheduleAtFixedRate(refreshTask, 15, 15, TimeUnit.MINUTES);
-    }
 
     private void addPlaceHolderStyle(JTextField textField) {
         Font font = textField.getFont();
         font = font.deriveFont(Font.ITALIC);
         textField.setFont(font);
-        textField.setForeground(JBColor.foreground()); //PlaceHolder font color
+        textField.setForeground(JBColor.GRAY); // Standard placeholder color
     }
 
     private void removePlaceHolderStyle(JTextField textField) {
         Font font = textField.getFont();
         font = font.deriveFont(Font.PLAIN);
         textField.setFont(font);
-        textField.setForeground(JBColor.LIGHT_GRAY); //PlaceHolder font color
+        textField.setForeground(UIManager.getColor("TextField.foreground")); // Standard text color
     }
 
-    private void configTaskList() {
+    // Renamed from configTaskList to loadTasksFromTrello for clarity
+    private void loadTasksFromTrello() {
         TaitiSettingsState settings = TaitiSettingsState.getInstance(project);
-        settings.retrieveStoredCredentials(project).thenRun(() -> {
-            ApplicationManager.getApplication().invokeLater(() -> {
-                // Verificar se todas as configurações necessárias estão presentes
-                if (settings.getToken().isEmpty() ||
-                    settings.getPivotalURL().isEmpty() ||
-                    settings.getGithubURL().isEmpty() ||
-                    settings.getScenariosFolder().isEmpty() ||
-                    settings.getStepDefinitionsFolder().isEmpty() ||
-                    settings.getUnityTestFolder().isEmpty()) {
-                    changeJpanel(configPanel);
-                    messageLabel.setText("Please configure all required settings.");
-                    messageLabel.setForeground(JBColor.RED);
-                    return;
-                }
+        // Settings should already be retrieved by checkSettingsAndLoad, but good to have them here.
+        // No need to call retrieveStoredCredentials again if checkSettingsAndLoad ensures they are loaded.
 
-                // Validar a URL do PivotalTracker
-                try {
-                    new URL(settings.getPivotalURL()).toURI();
-                    String regex = "https://[w]{3}\\.pivotaltracker\\.com/n/projects/\\d+";
-                    if (!settings.getPivotalURL().matches(regex)) {
-                        changeJpanel(configPanel);
-                        messageLabel.setText("Invalid PivotalTracker URL format.");
-                        messageLabel.setForeground(JBColor.RED);
-                        return;
+        // Ensure TrelloService is initialized (it should be if we reached here)
+        TrelloService trelloSvc = new TrelloService(
+                settings.getTrelloApiKey(),
+                settings.getTrelloServerToken(),
+                settings.getTrelloBoardUrlOrId(),
+                project
+        );
+
+        // The Stories class needs to be adapted to use TrelloService
+        // and fetch cards from Trello lists, map them to Task objects.
+        Stories trelloStories = new Stories(trelloSvc, project, settings.getGithubURL());
+        trelloStories.clearLists(); // Assuming this clears internal lists in Stories object
+
+        ProgressManager.getInstance().run(new com.intellij.openapi.progress.Task.Backgroundable(project, "Loading Trello Cards", true) {
+            @Override
+            public void run(@NotNull ProgressIndicator indicator) {
+                // The startList method in Stories needs to be adapted for Trello
+                // It should fetch cards from relevant lists (e.g., "My Unstarted", "Other Pending")
+                trelloStories.startList(indicator); // This is the core Trello data fetching
+            }
+
+            @Override
+            public void onFinished() {
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    // Ensure UI components are initialized before updating
+                    ensureUIComponentsInitialized();
+                    limparTaskListsInModels(); // Clear JTable models and internal lists
+
+                    // The following logic assumes trelloStories.getMyUnstartedStories() and
+                    // trelloStories.getOtherPendingStories() return Task objects populated from Trello.
+                    // Conflict analysis logic might need review based on Trello data structure.
+                    ArrayList<PlannedTask> othersPlannedTaskArrayList = new ArrayList<>();
+                    for (Task othersTask : trelloStories.getOtherPendingTasks()) {
+                        // Assuming Task has getiTesk() or similar for conflict analysis
+                        if (othersTask.getiTesk() != null) {
+                            othersPlannedTaskArrayList.add(othersTask.getiTesk());
+                        }
                     }
-                } catch (MalformedURLException | URISyntaxException e) {
-                    changeJpanel(configPanel);
-                    messageLabel.setText("Invalid PivotalTracker URL.");
-                    messageLabel.setForeground(JBColor.RED);
-                    return;
-                }
-
-                PivotalTracker pivotalTracker = new PivotalTracker(settings.getToken(), settings.getPivotalURL(), project);
-                int status = pivotalTracker.checkStatus();
-
-                if (status == 403) {
-                    changeJpanel(configPanel);
-                    messageLabel.setText("Invalid credentials. Please check your settings.");
-                    messageLabel.setForeground(JBColor.RED);
-                } else if (status != 200) {
-                    changeJpanel(configPanel);
-                    messageLabel.setText("Connection error. Status code: " + status);
-                    messageLabel.setForeground(JBColor.RED);
-                } else {
-                    /**
-                     * Primeiramente esvazio o array que contem as tasks para preenche-lo novamente com as informações mais recentes
-                     */
-                    Stories plannedStories = new Stories(pivotalTracker, project, settings.getGithubURL());
-                    plannedStories.clearLists();
-                    ProgressManager.getInstance().run(new com.intellij.openapi.progress.Task.Backgroundable(project, "Loading Stories", true) {
-                        @Override
-                        public void run(@NotNull ProgressIndicator indicator) {
-                            plannedStories.startList(indicator);
+                    for (Task myUnstartedTask : trelloStories.getMyUnstartedTasks()) {
+                        if (myUnstartedTask.getiTesk() != null) {
+                            double conflictRate = conflictAnalyzer.meanRelativeConflictRiskForTasks(myUnstartedTask.getiTesk(), othersPlannedTaskArrayList);
+                            double formattedConflictRate = Math.round(conflictRate * 100.0);
+                            myUnstartedTask.setConflictRate(formattedConflictRate);
+                        } else {
+                            myUnstartedTask.setConflictRate(0.0); // Default if no iTesk
                         }
+                    }
 
-                        @Override
-                        public void onFinished() {
-                            limparListas();
-                            ArrayList<PlannedTask> othersPlannedTaskArrayList = new ArrayList<>();
-                            for (Task othersTask : plannedStories.getOtherPendingStories()) {
-                                othersPlannedTaskArrayList.add(othersTask.getiTesk());
-                            }
-                            for (Task myUnstartedTask : plannedStories.getMyUnstartedStories()) {
-                                double conflictRate = conflictAnalyzer.meanRelativeConflictRiskForTasks(myUnstartedTask.getiTesk(), othersPlannedTaskArrayList);
-                                double formattedConflictRate = Math.round(conflictRate * 100.0);
-                                myUnstartedTask.setConflictRate(formattedConflictRate);
-                            }
+                    // Combine "My Unstarted" and "No Scenario" tasks if that's the desired logic
+                    List<Task> myCombinedUnstartedTasks = new ArrayList<>(trelloStories.getMyUnstartedTasks());
+                    // myCombinedUnstartedTasks.addAll(trelloStories.getNoScenarioTasks()); // If getNoScenarioTasks is still relevant
 
-                            // Add the unstarted stories to the main list first
-                            List<Task> myUnstartedStoriesWithNoScenarios = plannedStories.getMyUnstartedStories();
-                            myUnstartedStoriesWithNoScenarios.addAll(plannedStories.getNoScenarioTasks());
+                    updateMyUnstartedTasksListInModel(myCombinedUnstartedTasks, myUnstartedTasksList, modelo1);
+                    updateOtherPendingTasksListInModel(trelloStories.getOtherPendingTasks(), otherPendingTasksList, modelo2);
 
+                    changeJpanel(TaskBar); // Show the main task bar UI
 
-                            updateMyUnstartedStoriesList(myUnstartedStoriesWithNoScenarios, myUnstartedStoriesList, modelo1);
-                            // Add the started stories to the main list
-                            updateOtherPendingStoriesList(plannedStories.getOtherPendingStories(), otherPendingStoriesList, modelo2);
+                    // Refresh JTable views - safe calls with null checks
+                    safeFireTableDataChanged();
+                    unstartedTable.revalidate();
+                    unstartedTable.repaint();
+                    startedTable.revalidate();
+                    startedTable.repaint();
+                });
+            }
 
-                            changeJpanel(TaskBar);
-
-                            // Atualizar os modelos de tabela
-                            modelo1.fireTableDataChanged();
-                            modelo2.fireTableDataChanged();
-
-                            // Revalidar e repintar as tabelas
-                            unstartedTable.revalidate();
-                            unstartedTable.repaint();
-                            startedTable.revalidate();
-                            startedTable.repaint();
-                        }
-
-                        @Override
-                        public void onCancel() {
-                            super.onCancel();
-                            limparListas();
-
-                            changeJpanel(TaskBar);
-                            ApplicationManager.getApplication().invokeLater(() -> {
-                                JOptionPane.showMessageDialog(content, "Processing cancelled by user.");
-                            });
-                        }
-                    });
-                }
-            });
+            @Override
+            public void onCancel() {
+                super.onCancel();
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    limparTaskListsInModels();
+                    changeJpanel(TaskBar); // Show TaskBar even on cancel, maybe with a message
+                    JOptionPane.showMessageDialog(content, "Trello card loading cancelled by user.", "Cancelled", JOptionPane.INFORMATION_MESSAGE);
+                });
+            }
         });
     }
 
 
-    private void limparListas() {
-        myUnstartedStoriesList.clear();
-        otherPendingStoriesList.clear();
+    private void limparTaskListsInModels() {
+        try {
+            if (myUnstartedTasksList != null) {
+                myUnstartedTasksList.clear();
+            }
+            if (otherPendingTasksList != null) {
+                otherPendingTasksList.clear();
+            }
 
-        modelo1.setRowCount(0);
-        modelo2.setRowCount(0);
+            if (modelo1 != null) {
+                modelo1.setRowCount(0);
+            }
+            if (modelo2 != null) {
+                modelo2.setRowCount(0);
+            }
+        } catch (Exception e) {
+            System.err.println("ERROR in limparTaskListsInModels(): " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     public void changeJpanel(JPanel panel) {
-        System.out.println("Change JPanel: " + panel.getName());
-        System.out.println("Content panel component count: " + content.getComponentCount());
-        if (content.getComponentCount() > 0) {
-            if (content.getComponent(0) != panel) {
-                for (Component c : content.getComponents()) {
-                    if (c != null) {
-                        content.remove(c);
-                    }
-                }
-                content.add(panel, BorderLayout.CENTER); // Adiciona o novo painel
-                // Revalida e redesenha o conteúdo
-                content.revalidate();
-                content.repaint();
-            }
-        } else {
+        if (content == null || panel == null) {
+            System.err.println("Cannot change JPanel: content or panel is null.");
+            return;
+        }
+        //System.out.println("Attempting to change JPanel to: " + (panel.getName() != null ? panel.getName() : panel.getClass().getSimpleName()));
+
+        if (content.getComponentCount() == 0 || content.getComponent(0) != panel) {
+            content.removeAll();
             content.add(panel, BorderLayout.CENTER);
             content.revalidate();
             content.repaint();
+            //System.out.println("JPanel changed to: " + (panel.getName() != null ? panel.getName() : panel.getClass().getSimpleName()));
+        } else {
+            //System.out.println("JPanel is already set to: " + (panel.getName() != null ? panel.getName() : panel.getClass().getSimpleName()));
         }
     }
 
     public void refresh() {
-        configTaskList();
+        // Before refreshing, ensure settings are still valid.
+        // This also handles the case where settings might have been changed
+        // while the plugin was open.
+        changeJpanel(loading); // Show loading screen
+        checkSettingsAndLoad(); // This will re-validate settings and then call loadTasksFromTrello if OK
     }
 
-    private void updateMyUnstartedStoriesList(List<Task> stories, ArrayList<Task> storiesList, DefaultTableModel model) {
-        for (Task story : stories) {
-            storiesList.add(story);
-            String storyName = truncateStoryName(story.getStoryName());
+    // Renamed and adapted for Task objects
+    private void updateMyUnstartedTasksListInModel(List<Task> tasks, ArrayList<Task> internalList, DefaultTableModel model) {
+        internalList.clear(); // Clear before adding new ones
+        for (Task task : tasks) {
+            internalList.add(task);
+            String taskName = truncateTaskName(task.getName()); // Assuming Task has getName()
             String conflictRateStr;
 
-            if (story.hasScenarios()) {
-                conflictRateStr = story.getConflictRate() > 0 ? story.getConflictRate() + "%" : "0%";
+            if (task.hasScenarios()) { // Assuming Task has hasScenarios()
+                conflictRateStr = task.getConflictRate() > 0 ? task.getConflictRate() + "%" : "0%";
             } else {
                 conflictRateStr = "Add tests";
             }
-
-            model.addRow(new Object[]{storyName, conflictRateStr});
+            model.addRow(new Object[]{taskName, conflictRateStr});
         }
     }
 
-    private void updateOtherPendingStoriesList(List<Task> stories, ArrayList<Task> storiesList, DefaultTableModel model) {
-        for (Task story : stories) {
-            storiesList.add(story);
-            String storyName = truncateStoryName(story.getStoryName());
-            model.addRow(new Object[]{storyName});
+    // Renamed and adapted for Task objects
+    private void updateOtherPendingTasksListInModel(List<Task> tasks, ArrayList<Task> internalList, DefaultTableModel model) {
+        internalList.clear(); // Clear before adding new ones
+        for (Task task : tasks) {
+            internalList.add(task);
+            String taskName = truncateTaskName(task.getName());
+            model.addRow(new Object[]{taskName});
         }
     }
 
-    // Função para limitar o texto das tasks na TaskList
-    private String truncateStoryName(String storyName) {
-        if (storyName.length() > 50) {
-            storyName = String.format("%s...", storyName.substring(0, 50));
+    private String truncateTaskName(String taskName) {
+        if (taskName != null && taskName.length() > 50) {
+            return String.format("%s...", taskName.substring(0, 50));
         }
-        return storyName;
+        return taskName;
     }
 
-    public ArrayList<Task> getMyUnstartedStoriesList() {
-        return myUnstartedStoriesList;
+    public ArrayList<Task> getMyUnstartedTasksList() {
+        return myUnstartedTasksList;
     }
 
-    public ArrayList<Task> getOtherPendingStoriesList() {
-        return otherPendingStoriesList;
+    public ArrayList<Task> getOtherPendingTasksList() {
+        return otherPendingTasksList;
     }
 
     public JPanel getContent() {
@@ -582,5 +638,51 @@ public class TaskBarGUI {
 
     public LoadingScreen getLoading() {
         return loading;
+    }
+
+    /**
+     * Ensures that UI components are properly initialized before use.
+     * This method provides protection against timing issues where background tasks
+     * complete before UI initialization is finished.
+     */
+    private void ensureUIComponentsInitialized() {
+        if (TaskBar == null || modelo1 == null || modelo2 == null) {
+            System.err.println("WARNING: UI components not properly initialized. Re-initializing...");
+            initializeUIComponents();
+        }
+    }
+
+    /**
+     * Safely calls fireTableDataChanged() with proper null checks and recovery.
+     * This prevents NullPointerException when table models are not initialized.
+     */
+    private void safeFireTableDataChanged() {
+        try {
+            if (modelo1 != null) {
+                modelo1.fireTableDataChanged();
+            } else {
+                System.err.println("WARNING: modelo1 is null, skipping fireTableDataChanged()");
+            }
+
+            if (modelo2 != null) {
+                modelo2.fireTableDataChanged();
+            } else {
+                System.err.println("WARNING: modelo2 is null, skipping fireTableDataChanged()");
+            }
+
+            // Safely revalidate and repaint tables
+            if (unstartedTable != null) {
+                unstartedTable.revalidate();
+                unstartedTable.repaint();
+            }
+
+            if (startedTable != null) {
+                startedTable.revalidate();
+                startedTable.repaint();
+            }
+        } catch (Exception e) {
+            System.err.println("ERROR in safeFireTableDataChanged(): " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }

@@ -233,7 +233,7 @@ public class MainPanel {
         JPanel centerTitlePanel = new JPanel(new BorderLayout());
         JLabel centerTitleLabel = new JLabel("File Content");
         centerTitleLabel.setFont(centerTitleLabel.getFont().deriveFont(Font.BOLD));
-        centerTitleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+        centerTitleLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
         centerTitlePanel.add(centerTitleLabel, BorderLayout.WEST);
         centerPanel.add(centerTitlePanel, BorderLayout.NORTH);
 
@@ -278,7 +278,7 @@ public class MainPanel {
         JPanel titlePanel = new JPanel(new BorderLayout());
         JLabel titleLabel = new JLabel("Test Management");
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
-        titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
         titlePanel.add(titleLabel, BorderLayout.WEST);
         
         // Criar painel para o botão com borda e espaçamento
@@ -396,7 +396,7 @@ public class MainPanel {
             JPanel treeTitlePanel = new JPanel(new BorderLayout());
             JLabel treeTitleLabel = new JLabel("Features");
             treeTitleLabel.setFont(treeTitleLabel.getFont().deriveFont(Font.BOLD));
-            treeTitleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+            treeTitleLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
             treeTitlePanel.add(treeTitleLabel, BorderLayout.WEST);
             treePanel.add(treeTitlePanel, BorderLayout.NORTH);
 
